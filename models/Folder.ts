@@ -8,7 +8,7 @@ export interface IFolder {
   createdAt: Date;
 }
 
-const folderSchema = new Schema<IFolder>(
+const folderSchema = new Schema(
   {
     userId: {
       type: Schema.Types.ObjectId,

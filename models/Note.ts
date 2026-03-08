@@ -10,7 +10,7 @@ export interface INote {
   updatedAt: Date;
 }
 
-const noteSchema = new Schema<INote>(
+const noteSchema = new Schema(
   {
     userId: {
       type: Schema.Types.ObjectId,
