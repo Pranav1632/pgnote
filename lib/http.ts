@@ -18,8 +18,15 @@ export function getClientIp(request: Request | NextRequest): string {
   return "unknown";
 }
 
-export function errorResponse(status: number, message = "Request failed.") {
-  return NextResponse.json({ success: false, message }, { status });
+export function errorResponse(status: number, message = "Request failed.", code?: string) {
+  return NextResponse.json(
+    {
+      success: false,
+      message,
+      ...(code ? { code } : {}),
+    },
+    { status }
+  );
 }
 
 export function successResponse<T>(data: T, status = 200) {

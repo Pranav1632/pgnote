@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { connectToDatabase } from "@/lib/db";
+import { inferInfraErrorCode, logServerError } from "@/lib/error-utils";
 import { errorResponse, successResponse } from "@/lib/http";
 import { signupRequestSchema } from "@/lib/validators";
 import { UserModel } from "@/models/User";
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     const existingUser = await UserModel.exists({ slug: parsed.data.slug });
     if (existingUser) {
-      return errorResponse(409, "Unable to create account.");
+      return errorResponse(409, "Unable to create account.", "SLUG_ALREADY_EXISTS");
     }
 
     const createdUser = await UserModel.create({
@@ -45,9 +46,12 @@ export async function POST(request: NextRequest) {
     );
   } catch (error: unknown) {
     if ((error as MongoDuplicateKeyError).code === 11000) {
-      return errorResponse(409, "Unable to create account.");
+      return errorResponse(409, "Unable to create account.", "SLUG_ALREADY_EXISTS");
     }
 
-    return errorResponse(500, "Unable to create account.");
+    const errorCode = inferInfraErrorCode(error, "SIGNUP_FAILED");
+    logServerError("api/auth/signup", error, { errorCode });
+
+    return errorResponse(500, "Unable to create account.", errorCode);
   }
 }

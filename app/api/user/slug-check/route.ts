@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { connectToDatabase } from "@/lib/db";
+import { inferInfraErrorCode, logServerError } from "@/lib/error-utils";
 import { errorResponse, successResponse } from "@/lib/http";
 import { slugCheckRequestSchema } from "@/lib/validators";
 import { UserModel } from "@/models/User";
@@ -24,7 +25,10 @@ export async function POST(request: NextRequest) {
     return successResponse({
       available: !Boolean(existingUser),
     });
-  } catch {
-    return errorResponse(500, "Request failed.");
+  } catch (error: unknown) {
+    const errorCode = inferInfraErrorCode(error, "SLUG_CHECK_FAILED");
+    logServerError("api/user/slug-check", error, { errorCode });
+
+    return errorResponse(500, "Unable to check slug right now.", errorCode);
   }
 }

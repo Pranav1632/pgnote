@@ -50,6 +50,13 @@ type SlugAvailabilityState =
   | { status: "taken"; message: string }
   | { status: "error"; message: string };
 
+function appendErrorCode(message: string, code?: string): string {
+  if (!code) {
+    return message;
+  }
+  return `${message} (${code})`;
+}
+
 export function SignupForm() {
   const router = useRouter();
   const [chunks, setChunks] = useState<ChunkConfig[]>([{ from: 0, to: 7, reverse: false }]);
@@ -101,23 +108,31 @@ export function SignupForm() {
             body: JSON.stringify({ slug: normalized }),
           });
 
+          const payload = (await response.json()) as {
+            success?: boolean;
+            data?: { available?: boolean };
+            message?: string;
+            code?: string;
+          };
+
           if (!response.ok) {
             setSlugAvailability({
               status: "error",
-              message: "Unable to check slug right now.",
+              message: appendErrorCode(
+                payload.message ?? "Unable to check slug right now.",
+                payload.code
+              ),
             });
             return;
           }
 
-          const payload = (await response.json()) as {
-            success?: boolean;
-            data?: { available?: boolean };
-          };
-
           if (!payload.success || typeof payload.data?.available !== "boolean") {
             setSlugAvailability({
               status: "error",
-              message: "Unable to check slug right now.",
+              message: appendErrorCode(
+                payload.message ?? "Unable to check slug right now.",
+                payload.code
+              ),
             });
             return;
           }
@@ -225,10 +240,13 @@ export function SignupForm() {
         success?: boolean;
         data?: { redirectTo?: string };
         message?: string;
+        code?: string;
       };
 
       if (!response.ok || !payload.success || !payload.data?.redirectTo) {
-        setServerError(payload.message ?? "Unable to create account.");
+        setServerError(
+          appendErrorCode(payload.message ?? "Unable to create account.", payload.code)
+        );
         setIsSubmitting(false);
         return;
       }
