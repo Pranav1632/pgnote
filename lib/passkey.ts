@@ -14,6 +14,10 @@ const MIN_KEY_LENGTH = 8;
 const MAX_KEY_LENGTH = 14;
 
 export function validateAlgo(algo: PasskeyAlgo): { valid: boolean; error?: string } {
+  if (!algo || typeof algo !== "object") {
+    return { valid: false, error: "Algo must be an object." };
+  }
+
   if (!Number.isInteger(algo.keyLength)) {
     return { valid: false, error: "Key length must be an integer." };
   }
@@ -40,6 +44,10 @@ export function validateAlgo(algo: PasskeyAlgo): { valid: boolean; error?: strin
 
     if (!Number.isInteger(chunk.from) || !Number.isInteger(chunk.to)) {
       return { valid: false, error: `Chunk ${chunkIndex + 1} indices must be integers.` };
+    }
+
+    if (typeof chunk.reverse !== "boolean") {
+      return { valid: false, error: `Chunk ${chunkIndex + 1} reverse flag must be boolean.` };
     }
 
     if (chunk.from < 0 || chunk.to < 0 || chunk.from >= algo.keyLength || chunk.to >= algo.keyLength) {
