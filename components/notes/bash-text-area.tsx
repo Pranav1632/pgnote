@@ -1,13 +1,17 @@
 "use client";
 
-import { type ClipboardEvent, type KeyboardEvent } from "react";
+import { type ClipboardEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { SaveStatus, type SaveStatusState } from "@/components/notes/save-status";
 
 interface BashTextAreaProps {
   value: string;
   onChange: (nextValue: string) => void;
   onSave: () => void;
   isSaving: boolean;
+  saveState: SaveStatusState;
+  autosaveSeconds: number | null;
+  lastSavedAt: number | null;
   disabled?: boolean;
 }
 
@@ -16,15 +20,11 @@ export function BashTextArea({
   onChange,
   onSave,
   isSaving,
+  saveState,
+  autosaveSeconds,
+  lastSavedAt,
   disabled = false,
 }: BashTextAreaProps) {
-  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-      event.preventDefault();
-      onSave();
-    }
-  };
-
   const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     if (disabled) {
       return;
@@ -49,17 +49,19 @@ export function BashTextArea({
 
   return (
     <div className="rounded-2xl border border-zinc-800 bg-black/70 p-4 shadow-[0_0_0_1px_rgba(39,39,42,0.35)]">
-      <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <p className="text-xs tracking-[0.22em] text-zinc-500 uppercase">Bash Editor</p>
-        <Button type="button" size="xs" variant="outline" onClick={onSave} disabled={disabled || isSaving}>
-          {isSaving ? "Saving..." : "Save (Ctrl+S)"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <SaveStatus state={saveState} autosaveSeconds={autosaveSeconds} lastSavedAt={lastSavedAt} />
+          <Button type="button" size="xs" variant="outline" onClick={onSave} disabled={disabled || isSaving}>
+            {isSaving ? "Saving..." : "Save"}
+          </Button>
+        </div>
       </div>
 
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        onKeyDown={handleKeyDown}
         onPaste={handlePaste}
         spellCheck={false}
         disabled={disabled}

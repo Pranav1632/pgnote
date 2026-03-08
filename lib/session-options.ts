@@ -48,9 +48,9 @@ export function isValidSessionShape(value: unknown): value is AppSessionData {
 }
 
 export function isSessionExpired(
-  session: Pick<AppSessionData, "lastActivityAt" | "timeoutMinutes">,
+  session: Pick<AppSessionData, "loginAt" | "timeoutMinutes">,
   now = Date.now()
 ): boolean {
   const timeoutMs = session.timeoutMinutes * 60_000;
-  return session.lastActivityAt + timeoutMs <= now;
+  return session.loginAt + timeoutMs <= now;
 }

@@ -12,7 +12,7 @@ import type { FolderDTO, NoteDTO } from "@/types";
 interface NotesDashboardProps {
   slug: string;
   timeoutMinutes: number;
-  initialLastActivityAt: number;
+  initialLoginAt: number;
 }
 
 interface ApiSuccess<T> {
@@ -27,10 +27,7 @@ interface ApiFailure {
 
 type ApiResult<T> = ApiSuccess<T> | ApiFailure;
 
-function newlineCount(content: string): number {
-  const matches = content.match(/\n/g);
-  return matches ? matches.length : 0;
-}
+const AUTO_SAVE_DELAY_MS = 5000;
 
 function formatDuration(ms: number): string {
   const safeMs = Math.max(0, ms);
@@ -58,10 +55,19 @@ function getFailureMessage<T>(payload: ApiResult<T>, fallback: string): string {
   return fallback;
 }
 
+function parseTimestamp(isoValue: string | undefined): number | null {
+  if (!isoValue) {
+    return null;
+  }
+
+  const timestamp = new Date(isoValue).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
 export function NotesDashboard({
   slug,
   timeoutMinutes,
-  initialLastActivityAt,
+  initialLoginAt,
 }: NotesDashboardProps) {
   const router = useRouter();
   const [folders, setFolders] = useState<FolderDTO[]>([]);
@@ -74,27 +80,22 @@ export function NotesDashboard({
   const [isLoadingNotes, setIsLoadingNotes] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
-  const [activityAnchor, setActivityAnchor] = useState(initialLastActivityAt);
-  const [remainingMs, setRemainingMs] = useState(() => {
-    const timeoutMs = timeoutMinutes * 60_000;
-    return timeoutMs - (Date.now() - initialLastActivityAt);
-  });
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "unsaved">("saved");
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [autoSaveDueAt, setAutoSaveDueAt] = useState<number | null>(null);
+  const [autoSaveRemainingMs, setAutoSaveRemainingMs] = useState(0);
+
+  const sessionEndsAt = useMemo(
+    () => initialLoginAt + timeoutMinutes * 60_000,
+    [initialLoginAt, timeoutMinutes]
+  );
+
+  const [remainingMs, setRemainingMs] = useState(() => sessionEndsAt - Date.now());
 
   const lastSavedContentRef = useRef("");
   const saveInFlightRef = useRef(false);
   const warningShownRef = useRef(false);
   const isLoggingOutRef = useRef(false);
-  const isHeartbeatInFlightRef = useRef(false);
-  const lastLocalActivityRef = useRef(initialLastActivityAt);
-  const lastHeartbeatSentAtRef = useRef(initialLastActivityAt);
-  const heartbeatTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const timeoutMs = timeoutMinutes * 60_000;
-
-  const markLocalActivity = useCallback((timestamp = Date.now()) => {
-    lastLocalActivityRef.current = timestamp;
-    setActivityAnchor(timestamp);
-  }, []);
 
   const logoutAndRedirect = useCallback(
     async (reason?: "timeout" | "manual") => {
@@ -104,10 +105,6 @@ export function NotesDashboard({
 
       isLoggingOutRef.current = true;
       toast.dismiss("session-timeout-warning");
-      if (heartbeatTimeoutRef.current) {
-        clearTimeout(heartbeatTimeoutRef.current);
-        heartbeatTimeoutRef.current = null;
-      }
 
       try {
         await fetch("/api/auth/logout", { method: "POST" });
@@ -129,100 +126,27 @@ export function NotesDashboard({
     void logoutAndRedirect("timeout");
   }, [logoutAndRedirect]);
 
-  const sendHeartbeat = useCallback(async () => {
-    if (isHeartbeatInFlightRef.current || isLoggingOutRef.current) {
-      return;
-    }
-
-    isHeartbeatInFlightRef.current = true;
-    try {
-      const response = await fetch("/api/auth/heartbeat", { method: "POST" });
-      if (response.status === 401) {
-        handleUnauthorized();
-        return;
-      }
-
-      const payload = await parseApiResponse<{
-        lastActivityAt: number;
-        timeoutMinutes: number;
-      }>(response);
-
-      if (response.ok && payload.success) {
-        markLocalActivity(payload.data.lastActivityAt);
-      }
-    } catch {
-      // Heartbeat can fail temporarily due to network hiccups; keep local session running.
-    } finally {
-      isHeartbeatInFlightRef.current = false;
-    }
-  }, [handleUnauthorized, markLocalActivity]);
-
-  const queueHeartbeat = useCallback(() => {
-    if (isLoggingOutRef.current) {
-      return;
-    }
-
-    const now = Date.now();
-    const heartbeatIntervalMs = 8_000;
-    const elapsed = now - lastHeartbeatSentAtRef.current;
-
-    if (elapsed >= heartbeatIntervalMs) {
-      lastHeartbeatSentAtRef.current = now;
-      void sendHeartbeat();
-      return;
-    }
-
-    if (heartbeatTimeoutRef.current) {
-      return;
-    }
-
-    heartbeatTimeoutRef.current = setTimeout(() => {
-      heartbeatTimeoutRef.current = null;
-      lastHeartbeatSentAtRef.current = Date.now();
-      void sendHeartbeat();
-    }, heartbeatIntervalMs - elapsed);
-  }, [sendHeartbeat]);
-
-  useEffect(() => {
-    const onUserActivity = () => {
-      if (isLoggingOutRef.current) {
-        return;
-      }
-
-      const now = Date.now();
-      if (now - lastLocalActivityRef.current < 900) {
-        return;
-      }
-
-      markLocalActivity(now);
-      queueHeartbeat();
-    };
-
-    window.addEventListener("keydown", onUserActivity);
-    window.addEventListener("mousemove", onUserActivity);
-    window.addEventListener("paste", onUserActivity);
-    window.addEventListener("mousedown", onUserActivity);
-
-    return () => {
-      window.removeEventListener("keydown", onUserActivity);
-      window.removeEventListener("mousemove", onUserActivity);
-      window.removeEventListener("paste", onUserActivity);
-      window.removeEventListener("mousedown", onUserActivity);
-
-      if (heartbeatTimeoutRef.current) {
-        clearTimeout(heartbeatTimeoutRef.current);
-        heartbeatTimeoutRef.current = null;
-      }
-    };
-  }, [markLocalActivity, queueHeartbeat]);
-
   useEffect(() => {
     const interval = setInterval(() => {
-      setRemainingMs(timeoutMs - (Date.now() - activityAnchor));
+      setRemainingMs(sessionEndsAt - Date.now());
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [activityAnchor, timeoutMs]);
+  }, [sessionEndsAt]);
+
+  useEffect(() => {
+    if (autoSaveDueAt === null) {
+      setAutoSaveRemainingMs(0);
+      return;
+    }
+
+    setAutoSaveRemainingMs(Math.max(0, autoSaveDueAt - Date.now()));
+    const interval = setInterval(() => {
+      setAutoSaveRemainingMs(Math.max(0, autoSaveDueAt - Date.now()));
+    }, 250);
+
+    return () => clearInterval(interval);
+  }, [autoSaveDueAt]);
 
   useEffect(() => {
     if (isLoggingOutRef.current) {
@@ -239,7 +163,7 @@ export function NotesDashboard({
         warningShownRef.current = true;
         toast.warning("Session ending soon", {
           id: "session-timeout-warning",
-          description: "You will be logged out in about 30 seconds due to inactivity.",
+          description: "You will be logged out in about 30 seconds.",
           duration: 6000,
         });
       }
@@ -273,13 +197,12 @@ export function NotesDashboard({
         }
         return payload.data.folders[0]?.id ?? null;
       });
-      markLocalActivity();
     } catch {
       setDashboardError("Network error while loading folders.");
     } finally {
       setIsLoadingFolders(false);
     }
-  }, [handleUnauthorized, markLocalActivity]);
+  }, [handleUnauthorized]);
 
   const fetchNotes = useCallback(async (folderId: string) => {
     setIsLoadingNotes(true);
@@ -308,17 +231,25 @@ export function NotesDashboard({
       setActiveNoteId(firstNote?.id ?? null);
       setEditorContent(firstNote?.content ?? "");
       lastSavedContentRef.current = firstNote?.content ?? "";
-      markLocalActivity();
+      setSaveState("saved");
+      setLastSavedAt(parseTimestamp(firstNote?.updatedAt));
+      setAutoSaveDueAt(null);
+      setAutoSaveRemainingMs(0);
+      setSaveMessage(null);
     } catch {
       setDashboardError("Network error while loading notes.");
       setNotes([]);
       setActiveNoteId(null);
       setEditorContent("");
       lastSavedContentRef.current = "";
+      setSaveState("saved");
+      setLastSavedAt(null);
+      setAutoSaveDueAt(null);
+      setAutoSaveRemainingMs(0);
     } finally {
       setIsLoadingNotes(false);
     }
-  }, [handleUnauthorized, markLocalActivity]);
+  }, [handleUnauthorized]);
 
   useEffect(() => {
     void fetchFolders();
@@ -330,17 +261,26 @@ export function NotesDashboard({
       setActiveNoteId(null);
       setEditorContent("");
       lastSavedContentRef.current = "";
+      setSaveState("saved");
+      setLastSavedAt(null);
+      setAutoSaveDueAt(null);
+      setAutoSaveRemainingMs(0);
       return;
     }
+
     void fetchNotes(activeFolderId);
   }, [activeFolderId, fetchNotes]);
 
-  const saveContent = useCallback(async (contentToSave: string, reason: "manual" | "debounce" | "threshold") => {
+  const saveContent = useCallback(async (contentToSave: string, reason: "manual" | "autosave") => {
     if (!activeFolderId) {
       return;
     }
 
-    if (!contentToSave.trim()) {
+    const creatingNewNote = !activeNoteId;
+    if (creatingNewNote && contentToSave.trim().length === 0) {
+      setSaveState("saved");
+      setAutoSaveDueAt(null);
+      setAutoSaveRemainingMs(0);
       return;
     }
 
@@ -349,16 +289,22 @@ export function NotesDashboard({
     }
 
     if (contentToSave === lastSavedContentRef.current) {
+      setSaveState("saved");
+      setAutoSaveDueAt(null);
+      setAutoSaveRemainingMs(0);
       return;
     }
 
     saveInFlightRef.current = true;
     setIsSaving(true);
+    setSaveState("saving");
     setSaveMessage(null);
     setDashboardError(null);
+    setAutoSaveDueAt(null);
+    setAutoSaveRemainingMs(0);
 
     try {
-      if (!activeNoteId) {
+      if (creatingNewNote) {
         const createResponse = await fetch("/api/notes", {
           method: "POST",
           headers: {
@@ -377,6 +323,7 @@ export function NotesDashboard({
 
         const createPayload = await parseApiResponse<{ note: NoteDTO }>(createResponse);
         if (!createResponse.ok || !createPayload.success) {
+          setSaveState("unsaved");
           setDashboardError(getFailureMessage(createPayload, "Unable to save note."));
           return;
         }
@@ -404,6 +351,7 @@ export function NotesDashboard({
 
         const updatePayload = await parseApiResponse<{ note: NoteDTO }>(updateResponse);
         if (!updateResponse.ok || !updatePayload.success) {
+          setSaveState("unsaved");
           setDashboardError(getFailureMessage(updatePayload, "Unable to save note."));
           return;
         }
@@ -416,21 +364,23 @@ export function NotesDashboard({
       }
 
       lastSavedContentRef.current = contentToSave;
-      markLocalActivity();
-      setSaveMessage(reason === "manual" ? "Saved manually." : "Autosaved.");
+      setSaveState("saved");
+      setLastSavedAt(Date.now());
+      setSaveMessage(reason === "manual" ? "Saved." : "Autosaved.");
     } catch {
+      setSaveState("unsaved");
       setDashboardError("Network error while saving note.");
     } finally {
       saveInFlightRef.current = false;
       setIsSaving(false);
     }
-  }, [activeFolderId, activeNoteId, handleUnauthorized, markLocalActivity]);
+  }, [activeFolderId, activeNoteId, handleUnauthorized]);
 
   const debouncedSave = useMemo(
     () =>
       debounce((contentToSave: string) => {
-        void saveContent(contentToSave, "debounce");
-      }, 3000),
+        void saveContent(contentToSave, "autosave");
+      }, AUTO_SAVE_DELAY_MS),
     [saveContent]
   );
 
@@ -443,14 +393,24 @@ export function NotesDashboard({
   const handleEditorChange = (nextContent: string) => {
     setEditorContent(nextContent);
     setSaveMessage(null);
+    setDashboardError(null);
 
-    const unsavedNewlines = newlineCount(nextContent) - newlineCount(lastSavedContentRef.current);
-    if (unsavedNewlines >= 4) {
-      debouncedSave.clear();
-      void saveContent(nextContent, "threshold");
+    if (!activeFolderId) {
       return;
     }
 
+    if (nextContent === lastSavedContentRef.current) {
+      setSaveState("saved");
+      setAutoSaveDueAt(null);
+      setAutoSaveRemainingMs(0);
+      debouncedSave.clear();
+      return;
+    }
+
+    setSaveState("unsaved");
+    const dueAt = Date.now() + AUTO_SAVE_DELAY_MS;
+    setAutoSaveDueAt(dueAt);
+    setAutoSaveRemainingMs(AUTO_SAVE_DELAY_MS);
     debouncedSave(nextContent);
   };
 
@@ -496,8 +456,11 @@ export function NotesDashboard({
     setActiveNoteId(null);
     setEditorContent("");
     lastSavedContentRef.current = "";
+    setSaveState("saved");
+    setLastSavedAt(null);
+    setAutoSaveDueAt(null);
+    setAutoSaveRemainingMs(0);
     setSaveMessage("Folder created. Start typing your note.");
-    markLocalActivity();
   };
 
   const handleOpenNote = (noteId: string) => {
@@ -505,21 +468,38 @@ export function NotesDashboard({
     if (!selected) {
       return;
     }
+
+    debouncedSave.clear();
     setActiveNoteId(selected.id);
     setEditorContent(selected.content);
     lastSavedContentRef.current = selected.content;
+    setSaveState("saved");
+    setLastSavedAt(parseTimestamp(selected.updatedAt));
+    setAutoSaveDueAt(null);
+    setAutoSaveRemainingMs(0);
+    setSaveMessage(null);
   };
 
   const handleCreateNewNote = () => {
+    debouncedSave.clear();
     setActiveNoteId(null);
     setEditorContent("");
     lastSavedContentRef.current = "";
+    setSaveState("saved");
+    setLastSavedAt(null);
+    setAutoSaveDueAt(null);
+    setAutoSaveRemainingMs(0);
     setSaveMessage("New note draft started.");
   };
 
   const handleEndSession = async () => {
     await logoutAndRedirect("manual");
   };
+
+  const autosaveSeconds =
+    saveState === "unsaved" && autoSaveDueAt !== null
+      ? Math.max(1, Math.ceil(autoSaveRemainingMs / 1000))
+      : null;
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -569,6 +549,9 @@ export function NotesDashboard({
               onChange={handleEditorChange}
               onSave={handleManualSave}
               isSaving={isSaving}
+              saveState={saveState}
+              autosaveSeconds={autosaveSeconds}
+              lastSavedAt={lastSavedAt}
               disabled={!activeFolderId || isLoadingFolders || isLoadingNotes}
             />
 

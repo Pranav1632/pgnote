@@ -32,7 +32,7 @@ export default async function NotesPage({ params }: NotesPageProps) {
     <NotesDashboard
       slug={normalizedSlug}
       timeoutMinutes={session.timeoutMinutes}
-      initialLastActivityAt={session.lastActivityAt}
+      initialLoginAt={session.loginAt}
     />
   );
 }
