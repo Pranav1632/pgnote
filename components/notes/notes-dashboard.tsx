@@ -3,6 +3,7 @@
 import debounce from "debounce";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { BashTextArea } from "@/components/notes/bash-text-area";
 import { FolderSidebar } from "@/components/notes/folder-sidebar";
@@ -81,8 +82,114 @@ export function NotesDashboard({
 
   const lastSavedContentRef = useRef("");
   const saveInFlightRef = useRef(false);
+  const warningShownRef = useRef(false);
+  const isLoggingOutRef = useRef(false);
+  const isHeartbeatInFlightRef = useRef(false);
+  const lastLocalActivityRef = useRef(initialLastActivityAt);
 
   const timeoutMs = timeoutMinutes * 60_000;
+
+  const markLocalActivity = useCallback((timestamp = Date.now()) => {
+    lastLocalActivityRef.current = timestamp;
+    setActivityAnchor(timestamp);
+  }, []);
+
+  const logoutAndRedirect = useCallback(
+    async (reason?: "timeout" | "manual") => {
+      if (isLoggingOutRef.current) {
+        return;
+      }
+
+      isLoggingOutRef.current = true;
+      toast.dismiss("session-timeout-warning");
+
+      try {
+        await fetch("/api/auth/logout", { method: "POST" });
+      } catch {
+        // Ignore logout network errors and force redirect.
+      }
+
+      if (reason) {
+        router.push(`/${slug}?reason=${reason}`);
+        return;
+      }
+
+      router.push(`/${slug}`);
+    },
+    [router, slug]
+  );
+
+  const handleUnauthorized = useCallback(() => {
+    void logoutAndRedirect("timeout");
+  }, [logoutAndRedirect]);
+
+  const sendHeartbeat = useCallback(async () => {
+    if (isHeartbeatInFlightRef.current || isLoggingOutRef.current) {
+      return;
+    }
+
+    isHeartbeatInFlightRef.current = true;
+    try {
+      const response = await fetch("/api/auth/heartbeat", { method: "POST" });
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      const payload = await parseApiResponse<{
+        lastActivityAt: number;
+        timeoutMinutes: number;
+      }>(response);
+
+      if (response.ok && payload.success) {
+        markLocalActivity(payload.data.lastActivityAt);
+      }
+    } finally {
+      isHeartbeatInFlightRef.current = false;
+    }
+  }, [handleUnauthorized, markLocalActivity]);
+
+  const debouncedHeartbeat = useMemo(
+    () =>
+      debounce(() => {
+        void sendHeartbeat();
+      }, 8_000),
+    [sendHeartbeat]
+  );
+
+  useEffect(() => {
+    return () => {
+      debouncedHeartbeat.clear();
+    };
+  }, [debouncedHeartbeat]);
+
+  useEffect(() => {
+    const onUserActivity = () => {
+      if (isLoggingOutRef.current) {
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastLocalActivityRef.current < 900) {
+        return;
+      }
+
+      markLocalActivity(now);
+      debouncedHeartbeat();
+    };
+
+    window.addEventListener("keydown", onUserActivity);
+    window.addEventListener("mousemove", onUserActivity);
+    window.addEventListener("paste", onUserActivity);
+    window.addEventListener("mousedown", onUserActivity);
+
+    return () => {
+      window.removeEventListener("keydown", onUserActivity);
+      window.removeEventListener("mousemove", onUserActivity);
+      window.removeEventListener("paste", onUserActivity);
+      window.removeEventListener("mousedown", onUserActivity);
+    };
+  }, [debouncedHeartbeat, markLocalActivity]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -92,9 +199,30 @@ export function NotesDashboard({
     return () => clearInterval(interval);
   }, [activityAnchor, timeoutMs]);
 
-  const handleUnauthorized = useCallback(() => {
-    router.push(`/${slug}`);
-  }, [router, slug]);
+  useEffect(() => {
+    if (isLoggingOutRef.current) {
+      return;
+    }
+
+    if (remainingMs <= 0) {
+      void logoutAndRedirect("timeout");
+      return;
+    }
+
+    if (remainingMs <= 30_000) {
+      if (!warningShownRef.current) {
+        warningShownRef.current = true;
+        toast.warning("Session ending soon", {
+          id: "session-timeout-warning",
+          description: "You will be logged out in about 30 seconds due to inactivity.",
+          duration: 6000,
+        });
+      }
+    } else if (warningShownRef.current) {
+      warningShownRef.current = false;
+      toast.dismiss("session-timeout-warning");
+    }
+  }, [remainingMs, logoutAndRedirect]);
 
   const fetchFolders = useCallback(async () => {
     setIsLoadingFolders(true);
@@ -120,9 +248,9 @@ export function NotesDashboard({
       }
       return payload.data.folders[0]?.id ?? null;
     });
-    setActivityAnchor(Date.now());
+    markLocalActivity();
     setIsLoadingFolders(false);
-  }, [handleUnauthorized]);
+  }, [handleUnauthorized, markLocalActivity]);
 
   const fetchNotes = useCallback(async (folderId: string) => {
     setIsLoadingNotes(true);
@@ -151,9 +279,9 @@ export function NotesDashboard({
     setActiveNoteId(firstNote?.id ?? null);
     setEditorContent(firstNote?.content ?? "");
     lastSavedContentRef.current = firstNote?.content ?? "";
-    setActivityAnchor(Date.now());
+    markLocalActivity();
     setIsLoadingNotes(false);
-  }, [handleUnauthorized]);
+  }, [handleUnauthorized, markLocalActivity]);
 
   useEffect(() => {
     void fetchFolders();
@@ -251,13 +379,13 @@ export function NotesDashboard({
       }
 
       lastSavedContentRef.current = contentToSave;
-      setActivityAnchor(Date.now());
+      markLocalActivity();
       setSaveMessage(reason === "manual" ? "Saved manually." : "Autosaved.");
     } finally {
       saveInFlightRef.current = false;
       setIsSaving(false);
     }
-  }, [activeFolderId, activeNoteId, handleUnauthorized]);
+  }, [activeFolderId, activeNoteId, handleUnauthorized, markLocalActivity]);
 
   const debouncedSave = useMemo(
     () =>
@@ -315,7 +443,7 @@ export function NotesDashboard({
 
     setFolders((previous) => [...previous, payload.data.folder]);
     setActiveFolderId(payload.data.folder.id);
-    setActivityAnchor(Date.now());
+    markLocalActivity();
   };
 
   const handleOpenNote = (noteId: string) => {
@@ -336,8 +464,7 @@ export function NotesDashboard({
   };
 
   const handleEndSession = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push(`/${slug}`);
+    await logoutAndRedirect("manual");
   };
 
   return (
