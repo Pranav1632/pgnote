@@ -52,3 +52,31 @@ export async function requireValidSession(expectedSlug?: string): Promise<AppSes
 
   return session;
 }
+
+export async function requireSession(expectedSlug?: string): Promise<IronSession<AppSessionData> | null> {
+  const session = await getSession();
+
+  if (!isValidSessionShape(session)) {
+    return null;
+  }
+
+  if (!session.isLoggedIn) {
+    return null;
+  }
+
+  if (expectedSlug && session.slug !== expectedSlug) {
+    return null;
+  }
+
+  if (isSessionExpired(session)) {
+    session.destroy();
+    return null;
+  }
+
+  return session;
+}
+
+export async function touchSession(session: IronSession<AppSessionData>): Promise<void> {
+  session.lastActivityAt = Date.now();
+  await session.save();
+}

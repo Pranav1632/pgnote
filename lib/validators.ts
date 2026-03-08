@@ -87,3 +87,7 @@ export const updateNoteRequestSchema = z.object({
   folderId: objectIdSchema.optional(),
   content: z.string().min(1).max(200_000),
 });
+
+export const listNotesQuerySchema = z.object({
+  folderId: objectIdSchema.optional(),
+});
