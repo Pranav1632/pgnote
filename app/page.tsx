@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SlugAccessForm } from "@/components/auth/slug-access-form";
 import { Button } from "@/components/ui/button";
 
 export default function HomePage() {
@@ -14,6 +15,7 @@ export default function HomePage() {
         <Button asChild size="lg">
           <Link href="/signup">Go To Signup</Link>
         </Button>
+        <SlugAccessForm />
       </div>
     </main>
   );

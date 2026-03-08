@@ -1,6 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { ChallengeLoginForm } from "@/components/auth/challenge-login-form";
+import { connectToDatabase } from "@/lib/db";
 import { requireValidSession } from "@/lib/session";
+import { UserModel } from "@/models/User";
 
 const SLUG_REGEX = /^[a-z0-9][a-z0-9_-]{2,31}$/;
 
@@ -21,6 +23,12 @@ export default async function SlugLoginPage({ params }: SlugLoginPageProps) {
 
   if (rawSlug !== normalizedSlug) {
     redirect(`/${normalizedSlug}`);
+  }
+
+  await connectToDatabase();
+  const slugExists = await UserModel.exists({ slug: normalizedSlug });
+  if (!slugExists) {
+    notFound();
   }
 
   const activeSession = await requireValidSession(normalizedSlug);
