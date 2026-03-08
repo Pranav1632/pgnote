@@ -113,7 +113,6 @@ const userSchema = new Schema<IUser>(
   }
 );
 
-userSchema.index({ slug: 1 }, { unique: true });
 userSchema.index({ recoveryEmail: 1 }, { sparse: true });
 
 userSchema.pre(

@@ -1,6 +1,6 @@
 "use client";
 
-import { type KeyboardEvent } from "react";
+import { type ClipboardEvent, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 
 interface BashTextAreaProps {
@@ -25,6 +25,28 @@ export function BashTextArea({
     }
   };
 
+  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (disabled) {
+      return;
+    }
+
+    event.preventDefault();
+    const pastedText = event.clipboardData.getData("text");
+    const target = event.currentTarget;
+    const selectionStart = target.selectionStart ?? value.length;
+    const selectionEnd = target.selectionEnd ?? value.length;
+
+    const nextValue =
+      value.slice(0, selectionStart) + pastedText + value.slice(selectionEnd);
+    onChange(nextValue);
+
+    const nextCaretPosition = selectionStart + pastedText.length;
+    requestAnimationFrame(() => {
+      target.selectionStart = nextCaretPosition;
+      target.selectionEnd = nextCaretPosition;
+    });
+  };
+
   return (
     <div className="rounded-2xl border border-zinc-800 bg-black/70 p-4 shadow-[0_0_0_1px_rgba(39,39,42,0.35)]">
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -38,6 +60,7 @@ export function BashTextArea({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
         spellCheck={false}
         disabled={disabled}
         placeholder="$ paste your private notes here..."

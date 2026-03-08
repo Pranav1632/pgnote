@@ -33,7 +33,7 @@ function extractSlugFromNotesPath(pathname: string): string | null {
   return slug.toLowerCase();
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const pathSlug = extractSlugFromNotesPath(request.nextUrl.pathname);
   if (!pathSlug) {
     return NextResponse.next();

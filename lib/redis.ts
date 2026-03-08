@@ -54,59 +54,53 @@ export function challengeKey(challengeId: string): string {
 }
 
 export async function storeChallenge(challengeId: string, record: ChallengeRecord): Promise<void> {
-  await redis.set(challengeKey(challengeId), JSON.stringify(record), {
+  await redis.set(challengeKey(challengeId), record, {
     ex: CHALLENGE_TTL_SECONDS,
   });
 }
 
-export async function getChallenge(challengeId: string): Promise<ChallengeRecord | null> {
-  const raw = await redis.get<string>(challengeKey(challengeId));
+function parseChallengeRecord(raw: unknown): ChallengeRecord | null {
   if (!raw) {
     return null;
   }
 
-  try {
-    const parsed = JSON.parse(raw) as Partial<ChallengeRecord>;
-    if (
-      typeof parsed.slug !== "string" ||
-      typeof parsed.rawKey !== "string" ||
-      typeof parsed.createdAt !== "number"
-    ) {
+  let candidate: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      candidate = JSON.parse(raw);
+    } catch {
       return null;
     }
-    return {
-      slug: parsed.slug,
-      rawKey: parsed.rawKey,
-      createdAt: parsed.createdAt,
-    };
-  } catch {
+  }
+
+  if (!candidate || typeof candidate !== "object") {
     return null;
   }
+
+  const parsed = candidate as Partial<ChallengeRecord>;
+  if (
+    typeof parsed.slug !== "string" ||
+    typeof parsed.rawKey !== "string" ||
+    typeof parsed.createdAt !== "number"
+  ) {
+    return null;
+  }
+
+  return {
+    slug: parsed.slug,
+    rawKey: parsed.rawKey,
+    createdAt: parsed.createdAt,
+  };
+}
+
+export async function getChallenge(challengeId: string): Promise<ChallengeRecord | null> {
+  const raw = await redis.get(challengeKey(challengeId));
+  return parseChallengeRecord(raw);
 }
 
 export async function consumeChallenge(challengeId: string): Promise<ChallengeRecord | null> {
-  const raw = await redis.getdel<string>(challengeKey(challengeId));
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as Partial<ChallengeRecord>;
-    if (
-      typeof parsed.slug !== "string" ||
-      typeof parsed.rawKey !== "string" ||
-      typeof parsed.createdAt !== "number"
-    ) {
-      return null;
-    }
-    return {
-      slug: parsed.slug,
-      rawKey: parsed.rawKey,
-      createdAt: parsed.createdAt,
-    };
-  } catch {
-    return null;
-  }
+  const raw = await redis.getdel(challengeKey(challengeId));
+  return parseChallengeRecord(raw);
 }
 
 export async function deleteChallenge(challengeId: string): Promise<void> {

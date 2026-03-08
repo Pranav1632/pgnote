@@ -86,6 +86,8 @@ export function NotesDashboard({
   const isLoggingOutRef = useRef(false);
   const isHeartbeatInFlightRef = useRef(false);
   const lastLocalActivityRef = useRef(initialLastActivityAt);
+  const lastHeartbeatSentAtRef = useRef(initialLastActivityAt);
+  const heartbeatTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const timeoutMs = timeoutMinutes * 60_000;
 
@@ -102,6 +104,10 @@ export function NotesDashboard({
 
       isLoggingOutRef.current = true;
       toast.dismiss("session-timeout-warning");
+      if (heartbeatTimeoutRef.current) {
+        clearTimeout(heartbeatTimeoutRef.current);
+        heartbeatTimeoutRef.current = null;
+      }
 
       try {
         await fetch("/api/auth/logout", { method: "POST" });
@@ -149,19 +155,31 @@ export function NotesDashboard({
     }
   }, [handleUnauthorized, markLocalActivity]);
 
-  const debouncedHeartbeat = useMemo(
-    () =>
-      debounce(() => {
-        void sendHeartbeat();
-      }, 8_000),
-    [sendHeartbeat]
-  );
+  const queueHeartbeat = useCallback(() => {
+    if (isLoggingOutRef.current) {
+      return;
+    }
 
-  useEffect(() => {
-    return () => {
-      debouncedHeartbeat.clear();
-    };
-  }, [debouncedHeartbeat]);
+    const now = Date.now();
+    const heartbeatIntervalMs = 8_000;
+    const elapsed = now - lastHeartbeatSentAtRef.current;
+
+    if (elapsed >= heartbeatIntervalMs) {
+      lastHeartbeatSentAtRef.current = now;
+      void sendHeartbeat();
+      return;
+    }
+
+    if (heartbeatTimeoutRef.current) {
+      return;
+    }
+
+    heartbeatTimeoutRef.current = setTimeout(() => {
+      heartbeatTimeoutRef.current = null;
+      lastHeartbeatSentAtRef.current = Date.now();
+      void sendHeartbeat();
+    }, heartbeatIntervalMs - elapsed);
+  }, [sendHeartbeat]);
 
   useEffect(() => {
     const onUserActivity = () => {
@@ -175,7 +193,7 @@ export function NotesDashboard({
       }
 
       markLocalActivity(now);
-      debouncedHeartbeat();
+      queueHeartbeat();
     };
 
     window.addEventListener("keydown", onUserActivity);
@@ -188,8 +206,13 @@ export function NotesDashboard({
       window.removeEventListener("mousemove", onUserActivity);
       window.removeEventListener("paste", onUserActivity);
       window.removeEventListener("mousedown", onUserActivity);
+
+      if (heartbeatTimeoutRef.current) {
+        clearTimeout(heartbeatTimeoutRef.current);
+        heartbeatTimeoutRef.current = null;
+      }
     };
-  }, [debouncedHeartbeat, markLocalActivity]);
+  }, [markLocalActivity, queueHeartbeat]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -230,6 +253,7 @@ export function NotesDashboard({
 
     const response = await fetch("/api/folders", { method: "GET" });
     if (response.status === 401) {
+      setIsLoadingFolders(false);
       handleUnauthorized();
       return;
     }
@@ -261,6 +285,7 @@ export function NotesDashboard({
     });
 
     if (response.status === 401) {
+      setIsLoadingNotes(false);
       handleUnauthorized();
       return;
     }

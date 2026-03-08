@@ -1,6 +1,5 @@
 import { NextRequest } from "next/server";
 import { connectToDatabase } from "@/lib/db";
-import { buildSessionData, getSession } from "@/lib/session";
 import { errorResponse, successResponse } from "@/lib/http";
 import { signupRequestSchema } from "@/lib/validators";
 import { UserModel } from "@/models/User";
@@ -35,28 +34,12 @@ export async function POST(request: NextRequest) {
       algo: parsed.data.algo,
       sessionTimeout: parsed.data.sessionTimeout,
       recoveryEmail: parsed.data.recoveryEmail,
-      lastLogin: new Date(),
     });
-
-    const session = await getSession();
-    const sessionData = buildSessionData({
-      userId: String(createdUser._id),
-      slug: createdUser.slug,
-      timeoutMinutes: createdUser.sessionTimeout,
-    });
-
-    session.userId = sessionData.userId;
-    session.slug = sessionData.slug;
-    session.isLoggedIn = sessionData.isLoggedIn;
-    session.loginAt = sessionData.loginAt;
-    session.timeoutMinutes = sessionData.timeoutMinutes;
-    session.lastActivityAt = sessionData.lastActivityAt;
-    await session.save();
 
     return successResponse(
       {
         slug: createdUser.slug,
-        redirectTo: `/${createdUser.slug}/notes`,
+        redirectTo: `/${createdUser.slug}`,
       },
       201
     );
