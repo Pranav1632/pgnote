@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   async headers() {
+    const isProduction = process.env.NODE_ENV === "production";
     const contentSecurityPolicy = [
       "default-src 'self'",
       "base-uri 'self'",
@@ -13,19 +14,27 @@ const nextConfig: NextConfig = {
       "font-src 'self' data:",
       "connect-src 'self' https://*.upstash.io",
       "form-action 'self'",
-      "upgrade-insecure-requests",
+      ...(isProduction ? ["upgrade-insecure-requests"] : []),
     ].join("; ");
+
+    const sharedHeaders = [
+      { key: "X-Frame-Options", value: "DENY" },
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "no-referrer" },
+      { key: "Content-Security-Policy", value: contentSecurityPolicy },
+    ];
+
+    const strictTransportHeader = {
+      key: "Strict-Transport-Security",
+      value: "max-age=63072000; includeSubDomains; preload",
+    };
 
     return [
       {
         source: "/:path*",
-        headers: [
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "no-referrer" },
-          { key: "Content-Security-Policy", value: contentSecurityPolicy },
-          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
-        ],
+        headers: isProduction
+          ? [...sharedHeaders, strictTransportHeader]
+          : sharedHeaders,
       },
     ];
   },

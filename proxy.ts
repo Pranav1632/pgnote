@@ -30,6 +30,12 @@ function extractSlugFromNotesPath(pathname: string): string | null {
     return null;
   }
 
+  // Prevent matching API routes like /api/notes, which would otherwise
+  // look like a slug-notes path and incorrectly clear valid sessions.
+  if (slug === "api" || slug.startsWith("_next")) {
+    return null;
+  }
+
   return slug.toLowerCase();
 }
 

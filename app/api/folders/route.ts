@@ -9,6 +9,8 @@ interface MongoDuplicateKeyError extends Error {
   code?: number;
 }
 
+const DEFAULT_FOLDER_NAME = "Inbox";
+
 function toFolderDTO(folder: {
   _id: unknown;
   name: string;
@@ -29,9 +31,33 @@ export async function GET() {
     }
 
     await connectToDatabase();
-    const folders = await FolderModel.find({ userId: session.userId })
+    let folders = await FolderModel.find({ userId: session.userId })
       .sort({ createdAt: 1 })
       .lean();
+
+    if (folders.length === 0) {
+      try {
+        await FolderModel.updateOne(
+          { userId: session.userId, name: DEFAULT_FOLDER_NAME },
+          {
+            $setOnInsert: {
+              userId: session.userId,
+              name: DEFAULT_FOLDER_NAME,
+            },
+          },
+          { upsert: true }
+        );
+      } catch (error: unknown) {
+        if ((error as MongoDuplicateKeyError).code !== 11000) {
+          throw error;
+        }
+      }
+
+      folders = await FolderModel.find({ userId: session.userId })
+        .sort({ createdAt: 1 })
+        .lean();
+    }
+
     const typedFolders = folders as Array<{
       _id: unknown;
       name: string;
@@ -93,7 +119,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (error: unknown) {
     if ((error as MongoDuplicateKeyError).code === 11000) {
-      return errorResponse(409, "Unable to create folder.");
+      return errorResponse(409, "Folder already exists.");
     }
 
     return errorResponse(500, "Request failed.");

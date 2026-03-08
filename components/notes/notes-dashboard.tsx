@@ -150,6 +150,8 @@ export function NotesDashboard({
       if (response.ok && payload.success) {
         markLocalActivity(payload.data.lastActivityAt);
       }
+    } catch {
+      // Heartbeat can fail temporarily due to network hiccups; keep local session running.
     } finally {
       isHeartbeatInFlightRef.current = false;
     }
@@ -251,61 +253,71 @@ export function NotesDashboard({
     setIsLoadingFolders(true);
     setDashboardError(null);
 
-    const response = await fetch("/api/folders", { method: "GET" });
-    if (response.status === 401) {
-      setIsLoadingFolders(false);
-      handleUnauthorized();
-      return;
-    }
-
-    const payload = await parseApiResponse<{ folders: FolderDTO[] }>(response);
-    if (!response.ok || !payload.success) {
-      setDashboardError(getFailureMessage(payload, "Unable to load folders."));
-      setIsLoadingFolders(false);
-      return;
-    }
-
-    setFolders(payload.data.folders);
-    setActiveFolderId((previous) => {
-      if (previous && payload.data.folders.some((folder) => folder.id === previous)) {
-        return previous;
+    try {
+      const response = await fetch("/api/folders", { method: "GET" });
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
       }
-      return payload.data.folders[0]?.id ?? null;
-    });
-    markLocalActivity();
-    setIsLoadingFolders(false);
+
+      const payload = await parseApiResponse<{ folders: FolderDTO[] }>(response);
+      if (!response.ok || !payload.success) {
+        setDashboardError(getFailureMessage(payload, "Unable to load folders."));
+        return;
+      }
+
+      setFolders(payload.data.folders);
+      setActiveFolderId((previous) => {
+        if (previous && payload.data.folders.some((folder) => folder.id === previous)) {
+          return previous;
+        }
+        return payload.data.folders[0]?.id ?? null;
+      });
+      markLocalActivity();
+    } catch {
+      setDashboardError("Network error while loading folders.");
+    } finally {
+      setIsLoadingFolders(false);
+    }
   }, [handleUnauthorized, markLocalActivity]);
 
   const fetchNotes = useCallback(async (folderId: string) => {
     setIsLoadingNotes(true);
     setDashboardError(null);
 
-    const response = await fetch(`/api/notes?folderId=${encodeURIComponent(folderId)}`, {
-      method: "GET",
-    });
+    try {
+      const response = await fetch(`/api/notes?folderId=${encodeURIComponent(folderId)}`, {
+        method: "GET",
+      });
 
-    if (response.status === 401) {
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      const payload = await parseApiResponse<{ notes: NoteDTO[] }>(response);
+      if (!response.ok || !payload.success) {
+        setDashboardError(getFailureMessage(payload, "Unable to load notes."));
+        return;
+      }
+
+      const nextNotes = payload.data.notes;
+      setNotes(nextNotes);
+
+      const firstNote = nextNotes[0];
+      setActiveNoteId(firstNote?.id ?? null);
+      setEditorContent(firstNote?.content ?? "");
+      lastSavedContentRef.current = firstNote?.content ?? "";
+      markLocalActivity();
+    } catch {
+      setDashboardError("Network error while loading notes.");
+      setNotes([]);
+      setActiveNoteId(null);
+      setEditorContent("");
+      lastSavedContentRef.current = "";
+    } finally {
       setIsLoadingNotes(false);
-      handleUnauthorized();
-      return;
     }
-
-    const payload = await parseApiResponse<{ notes: NoteDTO[] }>(response);
-    if (!response.ok || !payload.success) {
-      setDashboardError(getFailureMessage(payload, "Unable to load notes."));
-      setIsLoadingNotes(false);
-      return;
-    }
-
-    const nextNotes = payload.data.notes;
-    setNotes(nextNotes);
-
-    const firstNote = nextNotes[0];
-    setActiveNoteId(firstNote?.id ?? null);
-    setEditorContent(firstNote?.content ?? "");
-    lastSavedContentRef.current = firstNote?.content ?? "";
-    markLocalActivity();
-    setIsLoadingNotes(false);
   }, [handleUnauthorized, markLocalActivity]);
 
   useEffect(() => {
@@ -406,6 +418,8 @@ export function NotesDashboard({
       lastSavedContentRef.current = contentToSave;
       markLocalActivity();
       setSaveMessage(reason === "manual" ? "Saved manually." : "Autosaved.");
+    } catch {
+      setDashboardError("Network error while saving note.");
     } finally {
       saveInFlightRef.current = false;
       setIsSaving(false);
@@ -446,6 +460,15 @@ export function NotesDashboard({
   };
 
   const handleCreateFolder = async (name: string) => {
+    const normalizedName = name.trim().toLowerCase();
+    const duplicateExists = folders.some(
+      (folder) => folder.name.trim().toLowerCase() === normalizedName
+    );
+
+    if (duplicateExists) {
+      throw new Error("Folder already exists.");
+    }
+
     const response = await fetch("/api/folders", {
       method: "POST",
       headers: {
@@ -463,11 +486,17 @@ export function NotesDashboard({
 
     const payload = await parseApiResponse<{ folder: FolderDTO }>(response);
     if (!response.ok || !payload.success) {
-      throw new Error(getFailureMessage(payload, "Unable to create folder."));
+      const fallback = response.status === 409 ? "Folder already exists." : "Unable to create folder.";
+      throw new Error(getFailureMessage(payload, fallback));
     }
 
     setFolders((previous) => [...previous, payload.data.folder]);
     setActiveFolderId(payload.data.folder.id);
+    setNotes([]);
+    setActiveNoteId(null);
+    setEditorContent("");
+    lastSavedContentRef.current = "";
+    setSaveMessage("Folder created. Start typing your note.");
     markLocalActivity();
   };
 
