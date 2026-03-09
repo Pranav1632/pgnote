@@ -46,7 +46,7 @@ const signupFormSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["customSessionTimeout"],
-        message: "Custom timeout is required.",
+        message: "Custom timeout is required..",
       });
     }
   });
