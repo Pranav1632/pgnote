@@ -8,6 +8,7 @@ export interface SignupPayload {
   algo: PasskeyAlgo;
   sessionTimeout: SessionTimeoutOption;
   recoveryEmail?: string;
+  customMongoUri?: string;
 }
 
 export interface ChallengeRequestPayload {

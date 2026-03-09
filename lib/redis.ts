@@ -7,6 +7,7 @@ import { normalizeSlug } from "@/lib/auth";
 
 const CHALLENGE_KEY_PREFIX = "pgnote:challenge:";
 const LOGIN_RATE_LIMIT_PREFIX = "pgnote:ratelimit:login";
+const RECOVERY_RATE_LIMIT_PREFIX = "pgnote:ratelimit:recovery";
 const CHALLENGE_TTL_SECONDS = 120;
 
 export interface ChallengeRecord {
@@ -18,6 +19,7 @@ export interface ChallengeRecord {
 declare global {
   var upstashRedisClient: Redis | undefined;
   var loginRateLimitInstance: Ratelimit | undefined;
+  var recoveryRateLimitInstance: Ratelimit | undefined;
 }
 
 export const redis =
@@ -36,9 +38,19 @@ export const loginRateLimit =
     prefix: LOGIN_RATE_LIMIT_PREFIX,
   });
 
+export const recoveryRateLimit =
+  globalThis.recoveryRateLimitInstance ??
+  new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(3, "10 m"),
+    analytics: true,
+    prefix: RECOVERY_RATE_LIMIT_PREFIX,
+  });
+
 if (process.env.NODE_ENV !== "production") {
   globalThis.upstashRedisClient = redis;
   globalThis.loginRateLimitInstance = loginRateLimit;
+  globalThis.recoveryRateLimitInstance = recoveryRateLimit;
 }
 
 export function loginRateLimitIdentifier(ipAddress: string, slug: string): string {
@@ -47,6 +59,10 @@ export function loginRateLimitIdentifier(ipAddress: string, slug: string): strin
 
 export async function checkLoginRateLimit(ipAddress: string, slug: string) {
   return loginRateLimit.limit(loginRateLimitIdentifier(ipAddress, slug));
+}
+
+export async function checkRecoveryRateLimit(ipAddress: string) {
+  return recoveryRateLimit.limit(ipAddress);
 }
 
 export function challengeKey(challengeId: string): string {

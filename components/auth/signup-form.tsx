@@ -5,11 +5,21 @@ import { useRouter } from "next/navigation";
 import debounce from "debounce";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
-import { Button } from "@/components/ui/button";
 import { AlgoBuilder } from "@/components/auth/algo-builder";
-import { type ChunkConfig, validateAlgo } from "@/lib/passkey";
+import { Button } from "@/components/ui/button";
+import {
+  MAX_KEY_LENGTH,
+  MIN_KEY_LENGTH,
+  type ChunkConfig,
+  validateAlgo,
+} from "@/lib/passkey";
 
 const SLUG_REGEX = /^[a-z0-9][a-z0-9_-]{2,31}$/;
+const EMAIL_SCHEMA = z.string().trim().email("Enter a valid email.");
+const INPUT_CLASS =
+  "w-full rounded-md border border-[#333] bg-black px-3 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-[#0070f3] focus:ring-2 focus:ring-[#0070f3]/30";
+const BUTTON_CLASS =
+  "rounded-md border border-[#333] bg-black text-white transition hover:bg-[#111] disabled:opacity-50";
 
 const signupFormSchema = z
   .object({
@@ -21,7 +31,7 @@ const signupFormSchema = z
         SLUG_REGEX,
         "Slug must be 3-32 chars and only use lowercase letters, numbers, underscore, or hyphen."
       ),
-    keyLength: z.number().int().min(8).max(14),
+    keyLength: z.number().int().min(MIN_KEY_LENGTH).max(MAX_KEY_LENGTH),
     recoveryEmail: z
       .string()
       .trim()
@@ -57,9 +67,23 @@ function appendErrorCode(message: string, code?: string): string {
   return `${message} (${code})`;
 }
 
+function normalizeChunksForKeyLength(chunks: ChunkConfig[], keyLength: number): ChunkConfig[] {
+  const maxIndex = Math.max(0, keyLength - 1);
+
+  return chunks.map((chunk) => {
+    const clampedFrom = Math.max(0, Math.min(chunk.from, maxIndex));
+    const clampedTo = Math.max(0, Math.min(chunk.to, maxIndex));
+    return {
+      ...chunk,
+      from: Math.min(clampedFrom, clampedTo),
+      to: Math.max(clampedFrom, clampedTo),
+    };
+  });
+}
+
 export function SignupForm() {
   const router = useRouter();
-  const [chunks, setChunks] = useState<ChunkConfig[]>([{ from: 0, to: 7, reverse: false }]);
+  const [chunks, setChunks] = useState<ChunkConfig[]>([{ from: 0, to: MIN_KEY_LENGTH - 1, reverse: false }]);
   const [order, setOrder] = useState<number[]>([0]);
   const [slugAvailability, setSlugAvailability] = useState<SlugAvailabilityState>({
     status: "idle",
@@ -72,17 +96,18 @@ export function SignupForm() {
   const form = useForm<SignupFormValues>({
     defaultValues: {
       slug: "",
-      keyLength: 8,
+      keyLength: MIN_KEY_LENGTH,
       recoveryEmail: "",
       sessionTimeoutPreset: "10",
       customSessionTimeout: 15,
     },
-    mode: "onSubmit",
+    mode: "onChange",
   });
 
   const slugValue = useWatch({ control: form.control, name: "slug" }) ?? "";
-  const keyLength = useWatch({ control: form.control, name: "keyLength" }) ?? 8;
+  const keyLength = useWatch({ control: form.control, name: "keyLength" }) ?? MIN_KEY_LENGTH;
   const timeoutPreset = useWatch({ control: form.control, name: "sessionTimeoutPreset" }) ?? "10";
+  const recoveryEmailValue = useWatch({ control: form.control, name: "recoveryEmail" }) ?? "";
 
   const debouncedSlugCheck = useMemo(
     () =>
@@ -164,6 +189,24 @@ export function SignupForm() {
       debouncedSlugCheck.clear();
     };
   }, [slugValue, debouncedSlugCheck]);
+
+  useEffect(() => {
+    const trimmed = recoveryEmailValue.trim();
+    if (trimmed.length === 0) {
+      form.clearErrors("recoveryEmail");
+      return;
+    }
+
+    if (!EMAIL_SCHEMA.safeParse(trimmed).success) {
+      form.setError("recoveryEmail", {
+        type: "manual",
+        message: "Enter a valid email.",
+      });
+      return;
+    }
+
+    form.clearErrors("recoveryEmail");
+  }, [recoveryEmailValue, form]);
 
   const onSubmit = form.handleSubmit(async (values) => {
     setServerError(null);
@@ -260,123 +303,135 @@ export function SignupForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-8">
-      <section className="grid gap-4 md:grid-cols-2">
-        <div className="md:col-span-2">
-          <label className="mb-2 block text-sm font-medium text-zinc-200">Slug</label>
-          <div className="flex overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900">
-            <span className="px-3 py-2 text-zinc-500">/</span>
-            <input
-              {...form.register("slug")}
-              placeholder="rahul"
-              autoComplete="off"
-              className="w-full bg-transparent px-1 py-2 text-zinc-100 outline-none placeholder:text-zinc-500"
-            />
+      <section className="border-l border-[#0070f3] pl-4">
+        <p className="text-xs tracking-[0.18em] text-zinc-500 uppercase">Step 1</p>
+        <h2 className="mt-1 text-base font-semibold text-zinc-100">Account Details</h2>
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className="lg:col-span-2">
+            <label className="mb-2 block text-sm font-medium text-zinc-200">Slug</label>
+            <div className="flex overflow-hidden rounded-md border border-[#333] bg-black">
+              <span className="px-3 py-2 text-zinc-500">/</span>
+              <input
+                {...form.register("slug")}
+                placeholder="rahul"
+                autoComplete="off"
+                className="w-full bg-transparent px-1 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
+              />
+            </div>
+            {form.formState.errors.slug && (
+              <p className="mt-1 text-sm text-rose-400">{form.formState.errors.slug.message}</p>
+            )}
+            <p
+              className={`mt-1 text-sm ${
+                slugAvailability.status === "available"
+                  ? "text-emerald-400"
+                  : slugAvailability.status === "taken"
+                    ? "text-rose-400"
+                    : "text-zinc-400"
+              }`}
+            >
+              {slugAvailability.message}
+            </p>
           </div>
-          {form.formState.errors.slug && (
-            <p className="mt-1 text-sm text-rose-400">{form.formState.errors.slug.message}</p>
-          )}
-          <p
-            className={`mt-1 text-sm ${
-              slugAvailability.status === "available"
-                ? "text-emerald-400"
-                : slugAvailability.status === "taken"
-                  ? "text-rose-400"
-                  : "text-zinc-400"
-            }`}
-          >
-            {slugAvailability.message}
-          </p>
-        </div>
 
-        <div>
-          <label className="mb-2 block text-sm font-medium text-zinc-200">Recovery Email (optional)</label>
-          <input
-            type="email"
-            {...form.register("recoveryEmail")}
-            placeholder="you@example.com"
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-400"
-          />
-          {form.formState.errors.recoveryEmail && (
-            <p className="mt-1 text-sm text-rose-400">{form.formState.errors.recoveryEmail.message}</p>
-          )}
-        </div>
-
-        <div>
-          <label className="mb-2 block text-sm font-medium text-zinc-200">Session Timeout</label>
-          <select
-            {...form.register("sessionTimeoutPreset")}
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100 outline-none focus:border-zinc-400"
-          >
-            <option value="2">2 minutes</option>
-            <option value="5">5 minutes</option>
-            <option value="10">10 minutes</option>
-            <option value="30">30 minutes</option>
-            <option value="custom">Custom</option>
-          </select>
-        </div>
-
-        {timeoutPreset === "custom" && (
           <div>
-            <label className="mb-2 block text-sm font-medium text-zinc-200">Custom Timeout (minutes)</label>
+            <label className="mb-2 block text-sm font-medium text-zinc-200">Recovery Email (optional)</label>
             <input
-              type="number"
-              min={1}
-              max={1440}
-              {...form.register("customSessionTimeout", {
-                setValueAs: (value) => {
-                  if (value === "" || value === null || value === undefined) {
-                    return undefined;
-                  }
-                  return Number(value);
-                },
-              })}
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100 outline-none focus:border-zinc-400"
+              type="email"
+              {...form.register("recoveryEmail")}
+              placeholder="you@example.com"
+              className={INPUT_CLASS}
             />
-            {form.formState.errors.customSessionTimeout && (
-              <p className="mt-1 text-sm text-rose-400">
-                {form.formState.errors.customSessionTimeout.message}
-              </p>
+            <p className="mt-1 text-xs leading-5 text-zinc-400">
+              If you forget your algo, we email it to you. Your algo is not sensitive - it
+              contains no keys or passwords.
+            </p>
+            {form.formState.errors.recoveryEmail && (
+              <p className="mt-1 text-sm text-rose-400">{form.formState.errors.recoveryEmail.message}</p>
             )}
           </div>
-        )}
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:col-span-2">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-zinc-200">Session Timeout</label>
+              <select {...form.register("sessionTimeoutPreset")} className={INPUT_CLASS}>
+                <option value="2">2 minutes</option>
+                <option value="5">5 minutes</option>
+                <option value="10">10 minutes</option>
+                <option value="30">30 minutes</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+
+            {timeoutPreset === "custom" && (
+              <div>
+                <label className="mb-2 block text-sm font-medium text-zinc-200">
+                  Custom Timeout (minutes)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={1440}
+                  {...form.register("customSessionTimeout", {
+                    setValueAs: (value) => {
+                      if (value === "" || value === null || value === undefined) {
+                        return undefined;
+                      }
+                      return Number(value);
+                    },
+                  })}
+                  className={INPUT_CLASS}
+                />
+                {form.formState.errors.customSessionTimeout && (
+                  <p className="mt-1 text-sm text-rose-400">
+                    {form.formState.errors.customSessionTimeout.message}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       </section>
 
-      <section>
-        <h2 className="mb-3 text-lg font-semibold text-zinc-100">Passkey Algo Builder</h2>
-        <AlgoBuilder
-          keyLength={keyLength}
-          chunks={chunks}
-          order={order}
-          onKeyLengthChange={(next) => {
-            form.setValue("keyLength", next, { shouldDirty: true, shouldValidate: true });
-            setChunks((previousChunks) => {
-              if (previousChunks.length === 1 && previousChunks[0]?.from === 0) {
-                return [{ ...previousChunks[0], to: Math.max(0, next - 1) }];
-              }
-
-              return previousChunks.map((chunk) => ({
-                ...chunk,
-                from: Math.min(chunk.from, Math.max(0, next - 1)),
-                to: Math.min(chunk.to, Math.max(0, next - 1)),
-              }));
-            });
-          }}
-          onChunksChange={setChunks}
-          onOrderChange={setOrder}
-        />
+      <section className="border-l border-[#333] pl-4">
+        <p className="text-xs tracking-[0.18em] text-zinc-500 uppercase">Step 2</p>
+        <h2 className="mt-1 text-base font-semibold text-zinc-100">Passkey Algo Builder</h2>
+        <p className="mt-1 text-sm text-zinc-400">
+          Build how your challenge is generated. You can auto-generate a random algo and then tune
+          it.
+        </p>
+        <div className="mt-4">
+          <AlgoBuilder
+            keyLength={keyLength}
+            chunks={chunks}
+            order={order}
+            onKeyLengthChange={(next) => {
+              form.setValue("keyLength", next, { shouldDirty: true, shouldValidate: true });
+              setChunks((previousChunks) => normalizeChunksForKeyLength(previousChunks, next));
+            }}
+            onChunksChange={setChunks}
+            onOrderChange={setOrder}
+            onRandomAlgoChange={(next) => {
+              form.setValue("keyLength", next.keyLength, { shouldDirty: true, shouldValidate: true });
+              setChunks(next.chunks);
+              setOrder(next.order);
+            }}
+          />
+        </div>
         {algoError && <p className="mt-2 text-sm text-rose-400">{algoError}</p>}
       </section>
 
-      <section className="rounded-xl border border-amber-400/20 bg-amber-500/5 p-4">
-        <p className="text-sm text-amber-200">
-          Algo is your only auth. We store nothing recoverable. If you forget your method, you
-          cannot recover access with certainty.
+      <section className="border-l border-[#333] pl-4">
+        <p className="text-xs tracking-[0.18em] text-zinc-500 uppercase">Step 3</p>
+        <h2 className="mt-1 text-base font-semibold text-zinc-100">Create Account</h2>
+        <p className="mt-1 text-sm text-zinc-400">
+          Your slug and algo shape define authentication. Keep your method memorable.
         </p>
       </section>
 
       {serverError && <p className="text-sm text-rose-400">{serverError}</p>}
 
-      <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
+      <Button type="submit" className={`${BUTTON_CLASS} h-9 w-full`} disabled={isSubmitting}>
         {isSubmitting ? "Creating Account..." : "Create Account"}
       </Button>
     </form>

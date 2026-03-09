@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { validateAlgo } from "@/lib/passkey";
+import { MAX_KEY_LENGTH, MIN_KEY_LENGTH, validateAlgo } from "@/lib/passkey";
+import { MONGO_URI_REGEX } from "@/lib/mongo-uri";
 
 const SLUG_REGEX = /^[a-z0-9][a-z0-9_-]{2,31}$/;
 const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
@@ -26,7 +27,7 @@ export const chunkConfigSchema = z.object({
 
 export const passkeyAlgoSchema = z
   .object({
-    keyLength: z.number().int().min(8).max(14),
+    keyLength: z.number().int().min(MIN_KEY_LENGTH).max(MAX_KEY_LENGTH),
     chunks: z.array(chunkConfigSchema).min(1),
     order: z.array(z.number().int()).min(1),
   })
@@ -52,11 +53,22 @@ export const recoveryEmailSchema = z.preprocess(
   z.string().trim().toLowerCase().email().max(320).optional()
 );
 
+export const customMongoUriSchema = z.preprocess(
+  (value) => {
+    if (typeof value === "string" && value.trim().length === 0) {
+      return undefined;
+    }
+    return value;
+  },
+  z.string().trim().regex(MONGO_URI_REGEX, "Invalid MongoDB URI.").max(2048).optional()
+);
+
 export const signupRequestSchema = z.object({
   slug: slugSchema,
   algo: passkeyAlgoSchema,
   sessionTimeout: sessionTimeoutSchema,
   recoveryEmail: recoveryEmailSchema,
+  customMongoUri: customMongoUriSchema,
 });
 
 export const slugCheckRequestSchema = z.object({
@@ -70,7 +82,16 @@ export const challengeRequestSchema = z.object({
 export const verifyChallengeRequestSchema = z.object({
   slug: slugSchema,
   challengeId: z.string().trim().min(10).max(64),
-  responseKey: z.string().min(8).max(14),
+  responseKey: z.string().min(MIN_KEY_LENGTH).max(MAX_KEY_LENGTH),
+});
+
+export const recoveryRequestSchema = z.object({
+  slug: slugSchema,
+  email: z.string().trim().toLowerCase().email().max(320),
+});
+
+export const mongoUriVerifyRequestSchema = z.object({
+  mongoUri: z.string().trim().regex(MONGO_URI_REGEX).max(2048),
 });
 
 export const createFolderRequestSchema = z.object({
@@ -90,4 +111,12 @@ export const updateNoteRequestSchema = z.object({
 
 export const listNotesQuerySchema = z.object({
   folderId: objectIdSchema.optional(),
+});
+
+export const deleteNoteParamsSchema = z.object({
+  id: objectIdSchema,
+});
+
+export const deleteFolderParamsSchema = z.object({
+  id: objectIdSchema,
 });

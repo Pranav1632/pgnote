@@ -10,8 +10,8 @@ export interface PasskeyAlgo {
   order: number[];
 }
 
-const MIN_KEY_LENGTH = 8;
-const MAX_KEY_LENGTH = 14;
+export const MIN_KEY_LENGTH = 5;
+export const MAX_KEY_LENGTH = 12;
 
 export function validateAlgo(algo: PasskeyAlgo): { valid: boolean; error?: string } {
   if (!algo || typeof algo !== "object") {
@@ -53,7 +53,7 @@ export function validateAlgo(algo: PasskeyAlgo): { valid: boolean; error?: strin
     if (chunk.from < 0 || chunk.to < 0 || chunk.from >= algo.keyLength || chunk.to >= algo.keyLength) {
       return {
         valid: false,
-        error: `Chunk ${chunkIndex + 1} indices must be within 0 and ${algo.keyLength - 1}.`,
+        error: `Chunk ${chunkIndex + 1} indices must be within 1 and ${algo.keyLength}.`,
       };
     }
 
@@ -66,7 +66,7 @@ export function validateAlgo(algo: PasskeyAlgo): { valid: boolean; error?: strin
       if (coverage[position] > 1) {
         return {
           valid: false,
-          error: `Chunks overlap at position ${position}.`,
+          error: `Chunks overlap at position ${position + 1}.`,
         };
       }
     }
@@ -76,7 +76,7 @@ export function validateAlgo(algo: PasskeyAlgo): { valid: boolean; error?: strin
     if (coverage[position] === 0) {
       return {
         valid: false,
-        error: `Algo has a gap at position ${position}.`,
+        error: `Algo has a gap at position ${position + 1}.`,
       };
     }
   }
@@ -115,7 +115,6 @@ export function applyAlgo(rawKey: string, algo: PasskeyAlgo): string {
     throw new Error("Raw key length does not match algo keyLength.");
   }
 
-  // Build transformed chunks first, then reassemble by the configured display order.
   const transformedChunks = algo.chunks.map((chunk) => {
     const segment = rawKey.slice(chunk.from, chunk.to + 1);
     return chunk.reverse ? segment.split("").reverse().join("") : segment;

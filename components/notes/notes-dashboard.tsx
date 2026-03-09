@@ -3,10 +3,21 @@
 import debounce from "debounce";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { BashTextArea } from "@/components/notes/bash-text-area";
 import { FolderSidebar } from "@/components/notes/folder-sidebar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { FolderDTO, NoteDTO } from "@/types";
 
 interface NotesDashboardProps {
@@ -64,6 +75,14 @@ function parseTimestamp(isoValue: string | undefined): number | null {
   return Number.isFinite(timestamp) ? timestamp : null;
 }
 
+function notePreviewText(content: string, maxLength = 60): string {
+  const normalized = content.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxLength)}...`;
+}
+
 export function NotesDashboard({
   slug,
   timeoutMinutes,
@@ -84,6 +103,10 @@ export function NotesDashboard({
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [autoSaveDueAt, setAutoSaveDueAt] = useState<number | null>(null);
   const [autoSaveRemainingMs, setAutoSaveRemainingMs] = useState(0);
+  const [pendingDeleteNote, setPendingDeleteNote] = useState<NoteDTO | null>(null);
+  const [isDeletingNote, setIsDeletingNote] = useState(false);
+  const [deletingNoteIds, setDeletingNoteIds] = useState<Set<string>>(() => new Set());
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const sessionEndsAt = useMemo(
     () => initialLoginAt + timeoutMinutes * 60_000,
@@ -109,7 +132,6 @@ export function NotesDashboard({
       try {
         await fetch("/api/auth/logout", { method: "POST" });
       } catch {
-        // Ignore logout network errors and force redirect.
       }
 
       if (reason) {
@@ -463,6 +485,114 @@ export function NotesDashboard({
     setSaveMessage("Folder created. Start typing your note.");
   };
 
+  const handleDeleteFolder = async (folderId: string) => {
+    try {
+      const response = await fetch(`/api/folders/${folderId}`, {
+        method: "DELETE",
+      });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        throw new Error("Unauthorized.");
+      }
+
+      if (!response.ok) {
+        toast.error("Failed to delete folder");
+        throw new Error("Failed to delete folder.");
+      }
+
+      setFolders((previousFolders) => {
+        const nextFolders = previousFolders.filter((folder) => folder.id !== folderId);
+
+        if (activeFolderId === folderId) {
+          const nextActiveFolderId = nextFolders[0]?.id ?? null;
+          debouncedSave.clear();
+          setActiveFolderId(nextActiveFolderId);
+          setNotes([]);
+          setActiveNoteId(null);
+          setEditorContent("");
+          lastSavedContentRef.current = "";
+          setSaveState("saved");
+          setLastSavedAt(null);
+          setAutoSaveDueAt(null);
+          setAutoSaveRemainingMs(0);
+          setSaveMessage(null);
+        }
+
+        return nextFolders;
+      });
+    } catch (error) {
+      toast.error("Failed to delete folder");
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error("Failed to delete folder.");
+    }
+  };
+
+  const handleDeleteNote = async () => {
+    if (!pendingDeleteNote) {
+      return;
+    }
+
+    setIsDeletingNote(true);
+
+    try {
+      const noteId = pendingDeleteNote.id;
+      const response = await fetch(`/api/notes/${noteId}`, {
+        method: "DELETE",
+      });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      if (!response.ok) {
+        toast.error("Failed to delete note");
+        return;
+      }
+
+      setDeletingNoteIds((previous) => {
+        const next = new Set(previous);
+        next.add(noteId);
+        return next;
+      });
+      setPendingDeleteNote(null);
+
+      window.setTimeout(() => {
+        setNotes((previousNotes) => {
+          const nextNotes = previousNotes.filter((note) => note.id !== noteId);
+
+          if (activeNoteId === noteId) {
+            const nextActiveNote = nextNotes[0];
+            debouncedSave.clear();
+            setActiveNoteId(nextActiveNote?.id ?? null);
+            setEditorContent(nextActiveNote?.content ?? "");
+            lastSavedContentRef.current = nextActiveNote?.content ?? "";
+            setSaveState("saved");
+            setLastSavedAt(parseTimestamp(nextActiveNote?.updatedAt));
+            setAutoSaveDueAt(null);
+            setAutoSaveRemainingMs(0);
+            setSaveMessage(null);
+          }
+
+          return nextNotes;
+        });
+
+        setDeletingNoteIds((previous) => {
+          const next = new Set(previous);
+          next.delete(noteId);
+          return next;
+        });
+      }, 180);
+    } catch {
+      toast.error("Failed to delete note");
+    } finally {
+      setIsDeletingNote(false);
+    }
+  };
+
   const handleOpenNote = (noteId: string) => {
     const selected = notes.find((note) => note.id === noteId);
     if (!selected) {
@@ -519,13 +649,16 @@ export function NotesDashboard({
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-[280px_1fr]">
+        <div className={`grid gap-4 ${isSidebarCollapsed ? "md:grid-cols-[88px_1fr]" : "md:grid-cols-[280px_1fr]"}`}>
           <div className="h-[calc(100vh-7.5rem)]">
             <FolderSidebar
               folders={folders}
               activeFolderId={activeFolderId}
+              isCollapsed={isSidebarCollapsed}
+              onToggleCollapse={() => setIsSidebarCollapsed((previous) => !previous)}
               onSelectFolder={setActiveFolderId}
               onCreateFolder={handleCreateFolder}
+              onDeleteFolder={handleDeleteFolder}
             />
           </div>
 
@@ -570,29 +703,73 @@ export function NotesDashboard({
 
               <div className="space-y-2">
                 {notes.map((note) => (
-                  <button
+                  <div
                     key={note.id}
-                    type="button"
-                    onClick={() => handleOpenNote(note.id)}
-                    className={`w-full rounded-xl border px-3 py-3 text-left transition ${
+                    className={`group relative rounded-xl border px-3 py-3 text-left transition-all duration-200 ${
                       activeNoteId === note.id
                         ? "border-zinc-400 bg-zinc-800 text-zinc-100"
                         : "border-zinc-800 bg-zinc-900/40 text-zinc-300 hover:border-zinc-700 hover:text-zinc-100"
-                    }`}
+                    } ${deletingNoteIds.has(note.id) ? "pointer-events-none opacity-0" : "opacity-100"}`}
                   >
-                    <div className="mb-1 text-xs text-zinc-500">
-                      {new Date(note.updatedAt).toLocaleString()}
-                    </div>
-                    <div className="line-clamp-3 font-mono text-sm">
-                      {note.content.length > 240 ? `${note.content.slice(0, 240)}...` : note.content}
-                    </div>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenNote(note.id)}
+                      className="w-full pr-9 text-left"
+                    >
+                      <div className="mb-1 text-xs text-zinc-500">
+                        {new Date(note.updatedAt).toLocaleString()}
+                      </div>
+                      <div className="line-clamp-3 font-mono text-sm">
+                        {note.content.length > 240 ? `${note.content.slice(0, 240)}...` : note.content}
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Delete note"
+                      onClick={() => setPendingDeleteNote(note)}
+                      className="absolute top-3 right-3 rounded-md border border-transparent p-1 text-zinc-500 opacity-0 transition hover:border-zinc-700 hover:text-rose-300 group-hover:opacity-100"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
           </section>
         </div>
       </div>
+
+      <AlertDialog
+        open={Boolean(pendingDeleteNote)}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingNote) {
+            setPendingDeleteNote(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this note?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDeleteNote
+                ? notePreviewText(pendingDeleteNote.content)
+                : "This note will be permanently deleted."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingNote}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDeletingNote}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleDeleteNote();
+              }}
+            >
+              {isDeletingNote ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
 }

@@ -1,5 +1,11 @@
 import mongoose from "mongoose";
-import { type ChunkConfig, type PasskeyAlgo, validateAlgo } from "@/lib/passkey";
+import {
+  MAX_KEY_LENGTH,
+  MIN_KEY_LENGTH,
+  type ChunkConfig,
+  type PasskeyAlgo,
+  validateAlgo,
+} from "@/lib/passkey";
 
 const { Schema } = mongoose;
 
@@ -10,6 +16,7 @@ export interface IUser {
   algo: PasskeyAlgo;
   sessionTimeout: number;
   recoveryEmail?: string;
+  customMongoUri?: string;
   createdAt: Date;
   lastLogin?: Date;
 }
@@ -42,8 +49,8 @@ const passkeyAlgoSchema = new Schema<PasskeyAlgo>(
     keyLength: {
       type: Number,
       required: true,
-      min: 8,
-      max: 14,
+      min: MIN_KEY_LENGTH,
+      max: MAX_KEY_LENGTH,
     },
     chunks: {
       type: [chunkConfigSchema],
@@ -97,6 +104,12 @@ const userSchema = new Schema<IUser>(
       trim: true,
       lowercase: true,
       maxlength: 320,
+      default: undefined,
+    },
+    customMongoUri: {
+      type: String,
+      trim: true,
+      maxlength: 2048,
       default: undefined,
     },
     lastLogin: {

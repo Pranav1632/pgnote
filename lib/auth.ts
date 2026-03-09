@@ -1,5 +1,10 @@
 import { customAlphabet, nanoid } from "nanoid";
-import { applyAlgo, type PasskeyAlgo } from "@/lib/passkey";
+import {
+  applyAlgo,
+  MAX_KEY_LENGTH,
+  MIN_KEY_LENGTH,
+  type PasskeyAlgo,
+} from "@/lib/passkey";
 
 const RAW_KEY_ALPHABET =
   "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*";
@@ -10,8 +15,10 @@ export function normalizeSlug(slug: string): string {
 }
 
 export function generateRawKey(length: number): string {
-  if (!Number.isInteger(length) || length < 8 || length > 14) {
-    throw new Error("Invalid key length. Must be between 8 and 14.");
+  if (!Number.isInteger(length) || length < MIN_KEY_LENGTH || length > MAX_KEY_LENGTH) {
+    throw new Error(
+      `Invalid key length. Must be between ${MIN_KEY_LENGTH} and ${MAX_KEY_LENGTH}.`
+    );
   }
 
   const keyGenerator = customAlphabet(RAW_KEY_ALPHABET, length);
