@@ -49,9 +49,9 @@ export function BashTextArea({
 
   return (
     <div className="rounded-2xl border border-zinc-800 bg-black/70 p-4 shadow-[0_0_0_1px_rgba(39,39,42,0.35)]">
-      <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs tracking-[0.22em] text-zinc-500 uppercase">Bash Editor</p>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           <SaveStatus state={saveState} autosaveSeconds={autosaveSeconds} lastSavedAt={lastSavedAt} />
           <Button type="button" size="xs" variant="outline" onClick={onSave} disabled={disabled || isSaving}>
             {isSaving ? "Saving..." : "Save"}
@@ -66,7 +66,7 @@ export function BashTextArea({
         spellCheck={false}
         disabled={disabled}
         placeholder="$ paste your private notes here..."
-        className="min-h-[280px] w-full resize-y rounded-xl border border-zinc-800 bg-black px-4 py-3 font-mono text-sm leading-6 text-emerald-400 outline-none placeholder:text-emerald-700 focus:border-emerald-700"
+        className="min-h-[220px] w-full resize-y rounded-xl border border-zinc-800 bg-black px-4 py-3 font-mono text-sm leading-6 text-emerald-400 outline-none placeholder:text-emerald-700 focus:border-emerald-700 md:min-h-[280px]"
       />
     </div>
   );

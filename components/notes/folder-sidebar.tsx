@@ -88,8 +88,8 @@ export function FolderSidebar({
   };
 
   return (
-    <aside className="h-full rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3 backdrop-blur">
-      <div className="mb-3 flex items-center justify-between gap-2">
+    <aside className="max-h-[42vh] overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3 backdrop-blur lg:h-full lg:max-h-none">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         {!isCollapsed && (
           <h2 className="text-sm font-semibold tracking-wide text-zinc-200 uppercase">Folders</h2>
         )}
@@ -128,7 +128,7 @@ export function FolderSidebar({
                 placeholder="DSACode"
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-400"
               />
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Button
                   type="button"
                   size="xs"
@@ -208,7 +208,7 @@ export function FolderSidebar({
                 <AlertDialogTrigger asChild>
                   <button
                     type="button"
-                    className="absolute top-2 right-2 rounded-md border border-transparent p-1 text-zinc-500 opacity-0 transition hover:border-zinc-700 hover:text-rose-300 group-hover:opacity-100"
+                    className="absolute top-2 right-2 rounded-md border border-transparent p-1 text-zinc-500 opacity-100 transition hover:border-zinc-700 hover:text-rose-300 md:opacity-0 md:group-hover:opacity-100"
                     aria-label={`Delete folder ${folder.name}`}
                   >
                     <Trash2 className="h-4 w-4" />

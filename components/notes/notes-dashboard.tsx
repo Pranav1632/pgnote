@@ -633,13 +633,13 @@ export function NotesDashboard({
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
-      <div className="mx-auto max-w-7xl px-4 py-5 md:px-6">
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 py-3">
+      <div className="mx-auto max-w-7xl px-3 py-4 sm:px-4 md:px-6">
+        <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs tracking-[0.28em] text-zinc-500 uppercase">pgnote workspace</p>
             <p className="text-sm text-zinc-300">/{slug}/notes</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-end">
             <div className="rounded-lg border border-zinc-800 bg-black/40 px-3 py-2 font-mono text-sm text-emerald-400">
               {formatDuration(remainingMs)}
             </div>
@@ -649,8 +649,8 @@ export function NotesDashboard({
           </div>
         </div>
 
-        <div className={`grid gap-4 ${isSidebarCollapsed ? "md:grid-cols-[88px_1fr]" : "md:grid-cols-[280px_1fr]"}`}>
-          <div className="h-[calc(100vh-7.5rem)]">
+        <div className={`grid gap-4 ${isSidebarCollapsed ? "lg:grid-cols-[88px_1fr]" : "lg:grid-cols-[280px_1fr]"}`}>
+          <div className="h-auto lg:h-[calc(100vh-7.5rem)]">
             <FolderSidebar
               folders={folders}
               activeFolderId={activeFolderId}
@@ -662,8 +662,8 @@ export function NotesDashboard({
             />
           </div>
 
-          <section className="space-y-4">
-            <div className="flex items-center justify-between gap-2">
+          <section className="min-w-0 space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-zinc-100">Notes</h2>
                 <p className="text-sm text-zinc-400">
@@ -727,8 +727,8 @@ export function NotesDashboard({
                       type="button"
                       aria-label="Delete note"
                       onClick={() => setPendingDeleteNote(note)}
-                      className="absolute top-3 right-3 rounded-md border border-transparent p-1 text-zinc-500 opacity-0 transition hover:border-zinc-700 hover:text-rose-300 group-hover:opacity-100"
-                    >
+                    className="absolute top-3 right-3 rounded-md border border-transparent p-1 text-zinc-500 opacity-100 transition hover:border-zinc-700 hover:text-rose-300 md:opacity-0 md:group-hover:opacity-100"
+                  >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>

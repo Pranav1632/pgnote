@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import debounce from "debounce";
+import { CheckCircle2, Info, LoaderCircle, TriangleAlert } from "lucide-react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { AlgoBuilder } from "@/components/auth/algo-builder";
@@ -27,9 +28,9 @@ const CUSTOM_MONGO_URI_SCHEMA = z
     "MongoDB URI must include a database name."
   );
 const INPUT_CLASS =
-  "w-full rounded-md border border-[#333] bg-black px-3 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-[#0070f3] focus:ring-2 focus:ring-[#0070f3]/30";
+  "w-full rounded-2xl border border-zinc-700 bg-zinc-950/90 px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-500 focus:ring-4 focus:ring-zinc-500/15";
 const BUTTON_CLASS =
-  "rounded-md border border-[#333] bg-black text-white transition hover:bg-[#111] disabled:opacity-50";
+  "rounded-2xl border border-zinc-700 bg-zinc-100 text-zinc-950 transition hover:bg-zinc-200 disabled:opacity-60";
 const CUSTOM_MONGO_DEFAULT_MESSAGE =
   "Optional. Leave blank to keep notes and folders in pgnote's managed database.";
 
@@ -59,7 +60,7 @@ const signupFormSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["customSessionTimeout"],
-        message: "Custom timeout is required..",
+        message: "Custom timeout is required.",
       });
     }
   });
@@ -78,6 +79,8 @@ type MongoUriVerificationState =
   | { status: "checking"; message: string }
   | { status: "verified"; message: string }
   | { status: "error"; message: string };
+
+type StatusTone = "info" | "checking" | "success" | "warning" | "error";
 
 function appendErrorCode(message: string, code?: string): string {
   if (!code) {
@@ -98,6 +101,80 @@ function normalizeChunksForKeyLength(chunks: ChunkConfig[], keyLength: number): 
       to: Math.max(clampedFrom, clampedTo),
     };
   });
+}
+
+function StatusNote({ tone, message }: { tone: StatusTone; message: string }) {
+  const styleMap: Record<
+    StatusTone,
+    {
+      wrapper: string;
+      iconClass: string;
+      Icon: typeof Info;
+    }
+  > = {
+    info: {
+      wrapper: "border-sky-500/20 bg-sky-500/10 text-sky-100",
+      iconClass: "text-sky-300",
+      Icon: Info,
+    },
+    checking: {
+      wrapper: "border-cyan-500/20 bg-cyan-500/10 text-cyan-100",
+      iconClass: "animate-spin text-cyan-300",
+      Icon: LoaderCircle,
+    },
+    success: {
+      wrapper: "border-emerald-500/20 bg-emerald-500/10 text-emerald-100",
+      iconClass: "text-emerald-300",
+      Icon: CheckCircle2,
+    },
+    warning: {
+      wrapper: "border-amber-500/20 bg-amber-500/10 text-amber-100",
+      iconClass: "text-amber-300",
+      Icon: TriangleAlert,
+    },
+    error: {
+      wrapper: "border-rose-500/20 bg-rose-500/10 text-rose-100",
+      iconClass: "text-rose-300",
+      Icon: TriangleAlert,
+    },
+  };
+
+  const { wrapper, iconClass, Icon } = styleMap[tone];
+
+  return (
+    <div className={`mt-2 flex items-start gap-2 rounded-2xl border px-3 py-2 text-sm ${wrapper}`}>
+      <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${iconClass}`} />
+      <p>{message}</p>
+    </div>
+  );
+}
+
+function availabilityTone(status: AvailabilityState["status"]): StatusTone {
+  switch (status) {
+    case "checking":
+      return "checking";
+    case "available":
+      return "success";
+    case "taken":
+      return "warning";
+    case "error":
+      return "error";
+    default:
+      return "info";
+  }
+}
+
+function mongoTone(status: MongoUriVerificationState["status"]): StatusTone {
+  switch (status) {
+    case "checking":
+      return "checking";
+    case "verified":
+      return "success";
+    case "error":
+      return "warning";
+    default:
+      return "info";
+  }
 }
 
 export function SignupForm() {
@@ -172,7 +249,7 @@ export function SignupForm() {
             code?: string;
           };
 
-          if (!response.ok) {
+          if (!response.ok || !payload.success || typeof payload.data?.available !== "boolean") {
             setSlugAvailability({
               status: "error",
               message: appendErrorCode(
@@ -183,28 +260,11 @@ export function SignupForm() {
             return;
           }
 
-          if (!payload.success || typeof payload.data?.available !== "boolean") {
-            setSlugAvailability({
-              status: "error",
-              message: appendErrorCode(
-                payload.message ?? "Unable to check slug right now.",
-                payload.code
-              ),
-            });
-            return;
-          }
-
-          if (payload.data.available) {
-            setSlugAvailability({
-              status: "available",
-              message: "Slug is available.",
-            });
-          } else {
-            setSlugAvailability({
-              status: "taken",
-              message: "Slug is already taken.",
-            });
-          }
+          setSlugAvailability(
+            payload.data.available
+              ? { status: "available", message: "Slug is available." }
+              : { status: "taken", message: "Slug is already taken." }
+          );
         } catch {
           setSlugAvailability({
             status: "error",
@@ -257,7 +317,7 @@ export function SignupForm() {
             code?: string;
           };
 
-          if (!response.ok) {
+          if (!response.ok || !payload.success || typeof payload.data?.available !== "boolean") {
             setRecoveryEmailAvailability({
               status: "error",
               message: appendErrorCode(
@@ -268,28 +328,11 @@ export function SignupForm() {
             return;
           }
 
-          if (!payload.success || typeof payload.data?.available !== "boolean") {
-            setRecoveryEmailAvailability({
-              status: "error",
-              message: appendErrorCode(
-                payload.message ?? "Unable to check recovery email right now.",
-                payload.code
-              ),
-            });
-            return;
-          }
-
-          if (payload.data.available) {
-            setRecoveryEmailAvailability({
-              status: "available",
-              message: "Recovery email is available.",
-            });
-          } else {
-            setRecoveryEmailAvailability({
-              status: "taken",
-              message: "Recovery email is already used.",
-            });
-          }
+          setRecoveryEmailAvailability(
+            payload.data.available
+              ? { status: "available", message: "Recovery email is available." }
+              : { status: "taken", message: "Recovery email is already used." }
+          );
         } catch {
           setRecoveryEmailAvailability({
             status: "error",
@@ -640,35 +683,34 @@ export function SignupForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-8">
-      <section className="border-l border-[#0070f3] pl-4">
-        <p className="text-xs tracking-[0.18em] text-zinc-500 uppercase">Step 1</p>
-        <h2 className="mt-1 text-base font-semibold text-zinc-100">Account Details</h2>
+      <section className="rounded-[1.75rem] border border-zinc-800 bg-zinc-950/90 p-5 md:p-6">
+        <p className="inline-flex rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-[11px] tracking-[0.22em] text-zinc-300 uppercase">
+          Step 1
+        </p>
+        <h2 className="mt-3 text-lg font-semibold text-zinc-100">Account Details</h2>
+        <p className="mt-1 text-sm text-zinc-400">
+          Start with your route identity, recovery path, and optional storage override.
+        </p>
+
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <div className="lg:col-span-2">
             <label className="mb-2 block text-sm font-medium text-zinc-200">Slug</label>
-            <div className="flex overflow-hidden rounded-md border border-[#333] bg-black">
-              <span className="px-3 py-2 text-zinc-500">/</span>
+            <div className="flex overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-950/90">
+              <span className="px-4 py-3 text-zinc-500">/</span>
               <input
                 {...form.register("slug")}
                 placeholder="rahul"
                 autoComplete="off"
-                className="w-full bg-transparent px-1 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
+                className="w-full bg-transparent px-1 py-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
               />
             </div>
             {form.formState.errors.slug && (
               <p className="mt-1 text-sm text-rose-400">{form.formState.errors.slug.message}</p>
             )}
-            <p
-              className={`mt-1 text-sm ${
-                slugAvailability.status === "available"
-                  ? "text-emerald-400"
-                  : slugAvailability.status === "taken"
-                    ? "text-rose-400"
-                    : "text-zinc-400"
-              }`}
-            >
-              {slugAvailability.message}
-            </p>
+            <StatusNote
+              tone={availabilityTone(slugAvailability.status)}
+              message={slugAvailability.message}
+            />
           </div>
 
           <div>
@@ -680,24 +722,20 @@ export function SignupForm() {
               autoComplete="email"
               className={INPUT_CLASS}
             />
-            <p className="mt-1 text-xs leading-5 text-zinc-400">
-              Required. If you forget your algo, recovery details for this account are sent only
-              to this email.
+            <StatusNote
+              tone="info"
+              message="Required. If you forget your algo, recovery details for this account are sent only to this email."
+            />
+            <p className="mt-2 text-xs leading-5 text-zinc-500">
+              This field is checked live so reused account emails can be stopped earlier.
             </p>
             {form.formState.errors.recoveryEmail && (
               <p className="mt-1 text-sm text-rose-400">{form.formState.errors.recoveryEmail.message}</p>
             )}
-            <p
-              className={`mt-1 text-sm ${
-                recoveryEmailAvailability.status === "available"
-                  ? "text-emerald-400"
-                  : recoveryEmailAvailability.status === "taken"
-                    ? "text-rose-400"
-                    : "text-zinc-400"
-              }`}
-            >
-              {recoveryEmailAvailability.message}
-            </p>
+            <StatusNote
+              tone={availabilityTone(recoveryEmailAvailability.status)}
+              message={recoveryEmailAvailability.message}
+            />
           </div>
 
           <div className="lg:col-span-2">
@@ -712,32 +750,23 @@ export function SignupForm() {
               spellCheck={false}
               className={INPUT_CLASS}
             />
-            <p className="mt-1 text-xs leading-5 text-zinc-400">
-              Optional. If verified, only folders and notes are stored in your MongoDB database.
-              Your slug, recovery email, login algo structure, and session metadata stay in
-              pgnote&apos;s main database.
-            </p>
-            <p className="mt-1 text-xs leading-5 text-zinc-500">
-              Warning: keep this URI secret. Live verification checks database name format and
-              current connectivity, but later permission, billing, allowlist, or network changes
-              can still stop note access.
-            </p>
+            <StatusNote
+              tone="info"
+              message="Optional. If verified, only folders and notes are stored in your MongoDB database. Your slug, recovery email, login algo structure, and session metadata stay in pgnote's main database."
+            />
+            <StatusNote
+              tone="warning"
+              message="Keep this URI secret. Live verification checks format and current connectivity, but later permission, billing, allowlist, or network changes can still stop note access."
+            />
             {form.formState.errors.customMongoUri && (
               <p className="mt-1 text-sm text-rose-400">
                 {form.formState.errors.customMongoUri.message}
               </p>
             )}
-            <p
-              className={`mt-1 text-sm ${
-                mongoUriVerification.status === "verified"
-                  ? "text-emerald-400"
-                  : mongoUriVerification.status === "error"
-                    ? "text-rose-400"
-                    : "text-zinc-400"
-              }`}
-            >
-              {mongoUriVerification.message}
-            </p>
+            <StatusNote
+              tone={mongoTone(mongoUriVerification.status)}
+              message={mongoUriVerification.message}
+            />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:col-span-2">
@@ -750,6 +779,10 @@ export function SignupForm() {
                 <option value="30">30 minutes</option>
                 <option value="custom">Custom</option>
               </select>
+              <StatusNote
+                tone="info"
+                message="The session countdown is strict. Typing and mouse movement do not extend it after login."
+              />
             </div>
 
             {timeoutPreset === "custom" && (
@@ -782,9 +815,11 @@ export function SignupForm() {
         </div>
       </section>
 
-      <section className="border-l border-[#333] pl-4">
-        <p className="text-xs tracking-[0.18em] text-zinc-500 uppercase">Step 2</p>
-        <h2 className="mt-1 text-base font-semibold text-zinc-100">Passkey Algo Builder</h2>
+      <section className="rounded-[1.75rem] border border-zinc-800 bg-zinc-950/90 p-5 md:p-6">
+        <p className="inline-flex rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-[11px] tracking-[0.22em] text-zinc-300 uppercase">
+          Step 2
+        </p>
+        <h2 className="mt-3 text-lg font-semibold text-zinc-100">Passkey Algo Builder</h2>
         <p className="mt-1 text-sm text-zinc-400">
           Build how your challenge is generated. You can auto-generate a random algo and then tune
           it.
@@ -810,18 +845,31 @@ export function SignupForm() {
         {algoError && <p className="mt-2 text-sm text-rose-400">{algoError}</p>}
       </section>
 
-      <section className="border-l border-[#333] pl-4">
-        <p className="text-xs tracking-[0.18em] text-zinc-500 uppercase">Step 3</p>
-        <h2 className="mt-1 text-base font-semibold text-zinc-100">Create Account</h2>
+      <section className="rounded-[1.75rem] border border-zinc-800 bg-zinc-950/90 p-5 md:p-6">
+        <p className="inline-flex rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-[11px] tracking-[0.22em] text-zinc-300 uppercase">
+          Step 3
+        </p>
+        <h2 className="mt-3 text-lg font-semibold text-zinc-100">Create Account</h2>
         <p className="mt-1 text-sm text-zinc-400">
           Your slug and algo shape define authentication. Keep your method memorable.
         </p>
+        <StatusNote
+          tone="info"
+          message="This signup UI now surfaces sign, info, warning, success, and checking states much more clearly."
+        />
       </section>
 
-      {serverError && <p className="text-sm text-rose-400">{serverError}</p>}
+      {serverError && <StatusNote tone="error" message={serverError} />}
 
-      <Button type="submit" className={`${BUTTON_CLASS} h-9 w-full`} disabled={isSubmitting}>
-        {isSubmitting ? "Creating Account..." : "Create Account"}
+      <Button type="submit" className={`${BUTTON_CLASS} h-12 w-full text-sm font-semibold`} disabled={isSubmitting}>
+        {isSubmitting ? (
+          <span className="flex items-center gap-2">
+            <LoaderCircle className="h-4 w-4 animate-spin" />
+            Creating Account...
+          </span>
+        ) : (
+          "Create Account"
+        )}
       </Button>
     </form>
   );
