@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MAX_KEY_LENGTH, MIN_KEY_LENGTH, validateAlgo } from "@/lib/passkey";
-import { MONGO_URI_REGEX } from "@/lib/mongo-uri";
+import { hasMongoDatabaseName, MONGO_URI_REGEX } from "@/lib/mongo-uri-format";
 
 const SLUG_REGEX = /^[a-z0-9][a-z0-9_-]{2,31}$/;
 const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
@@ -57,7 +57,13 @@ export const customMongoUriSchema = z.preprocess(
     }
     return value;
   },
-  z.string().trim().regex(MONGO_URI_REGEX, "Invalid MongoDB URI.").max(2048).optional()
+  z
+    .string()
+    .trim()
+    .regex(MONGO_URI_REGEX, "Invalid MongoDB URI.")
+    .refine((value) => hasMongoDatabaseName(value), "MongoDB URI must include a database name.")
+    .max(2048)
+    .optional()
 );
 
 export const signupRequestSchema = z.object({

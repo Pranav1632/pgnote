@@ -41,3 +41,10 @@ noteSchema.index({ userId: 1, updatedAt: -1 });
 noteSchema.index({ userId: 1, folderId: 1, updatedAt: -1 });
 
 export const NoteModel = mongoose.models.Note ?? mongoose.model<INote>("Note", noteSchema);
+
+export function getNoteModel(connection: typeof NoteModel.db): typeof NoteModel {
+  return (
+    (connection.models.Note as typeof NoteModel | undefined) ??
+    connection.model<INote>("Note", noteSchema)
+  );
+}

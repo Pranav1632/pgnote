@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
+import { getMongoDatabaseName, MONGO_URI_REGEX } from "@/lib/mongo-uri-format";
 
-export const MONGO_URI_REGEX = /^mongodb(?:\+srv)?:\/\/.+/i;
+export { getMongoDatabaseName, MONGO_URI_REGEX } from "@/lib/mongo-uri-format";
 
 export function isMongoUriFormat(uri: string): boolean {
   return MONGO_URI_REGEX.test(uri.trim());
@@ -8,7 +9,7 @@ export function isMongoUriFormat(uri: string): boolean {
 
 export async function verifyMongoUriConnectivity(uri: string): Promise<boolean> {
   const normalizedUri = uri.trim();
-  if (!isMongoUriFormat(normalizedUri)) {
+  if (!isMongoUriFormat(normalizedUri) || !getMongoDatabaseName(normalizedUri)) {
     return false;
   }
 

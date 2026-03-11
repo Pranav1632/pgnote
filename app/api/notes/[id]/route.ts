@@ -1,10 +1,9 @@
 import { NextRequest } from "next/server";
-import { connectToDatabase } from "@/lib/db";
-import { logServerError } from "@/lib/error-utils";
+import { inferInfraErrorCode, logServerError } from "@/lib/error-utils";
 import { errorResponse, successResponse } from "@/lib/http";
+import { getNoteStorageContextForUser, resolveNoteStorageFailure } from "@/lib/note-storage";
 import { requireSession, touchSession } from "@/lib/session";
 import { deleteNoteParamsSchema } from "@/lib/validators";
-import { NoteModel } from "@/models/Note";
 
 interface DeleteNoteRouteContext {
   params: Promise<{
@@ -13,6 +12,8 @@ interface DeleteNoteRouteContext {
 }
 
 export async function DELETE(_request: NextRequest, context: DeleteNoteRouteContext) {
+  let usingCustomDatabase = false;
+
   try {
     const session = await requireSession();
     if (!session) {
@@ -25,9 +26,11 @@ export async function DELETE(_request: NextRequest, context: DeleteNoteRouteCont
       return errorResponse(400, "Invalid request.");
     }
 
-    await connectToDatabase();
+    const noteStorage = await getNoteStorageContextForUser(session.userId);
+    usingCustomDatabase = noteStorage.usingCustomDatabase;
+    const { noteModel } = noteStorage;
 
-    const deletedNote = await NoteModel.findOneAndDelete({
+    const deletedNote = await noteModel.findOneAndDelete({
       _id: parsedParams.data.id,
       userId: session.userId,
     }).lean();
@@ -42,6 +45,19 @@ export async function DELETE(_request: NextRequest, context: DeleteNoteRouteCont
       deletedNoteId: parsedParams.data.id,
     });
   } catch (error: unknown) {
+    const storageFailure = resolveNoteStorageFailure(error);
+    if (storageFailure) {
+      return errorResponse(storageFailure.status, storageFailure.message, storageFailure.code);
+    }
+
+    if (usingCustomDatabase) {
+      return errorResponse(
+        503,
+        "Your custom MongoDB database is unavailable. Notes and folders stay in your database only, so pgnote cannot load or save them until that connection works again.",
+        inferInfraErrorCode(error, "CUSTOM_MONGO_REQUEST_FAILED")
+      );
+    }
+
     logServerError("api/notes/[id]/delete", error);
     return errorResponse(500, "Request failed.");
   }

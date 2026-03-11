@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server";
-import { connectToDatabase } from "@/lib/db";
+import { inferInfraErrorCode, logServerError } from "@/lib/error-utils";
 import { errorResponse, successResponse } from "@/lib/http";
+import { getNoteStorageContextForUser, resolveNoteStorageFailure } from "@/lib/note-storage";
 import { requireSession, touchSession } from "@/lib/session";
 import { createFolderRequestSchema } from "@/lib/validators";
-import { FolderModel } from "@/models/Folder";
 
 interface MongoDuplicateKeyError extends Error {
   code?: number;
@@ -24,20 +24,24 @@ function toFolderDTO(folder: {
 }
 
 export async function GET() {
+  let usingCustomDatabase = false;
+
   try {
     const session = await requireSession();
     if (!session) {
       return errorResponse(401, "Unauthorized.");
     }
 
-    await connectToDatabase();
-    let folders = await FolderModel.find({ userId: session.userId })
+    const noteStorage = await getNoteStorageContextForUser(session.userId);
+    usingCustomDatabase = noteStorage.usingCustomDatabase;
+    const { folderModel } = noteStorage;
+    let folders = await folderModel.find({ userId: session.userId })
       .sort({ createdAt: 1 })
       .lean();
 
     if (folders.length === 0) {
       try {
-        await FolderModel.updateOne(
+        await folderModel.updateOne(
           { userId: session.userId, name: DEFAULT_FOLDER_NAME },
           {
             $setOnInsert: {
@@ -53,7 +57,7 @@ export async function GET() {
         }
       }
 
-      folders = await FolderModel.find({ userId: session.userId })
+      folders = await folderModel.find({ userId: session.userId })
         .sort({ createdAt: 1 })
         .lean();
     }
@@ -75,12 +79,28 @@ export async function GET() {
         })
       ),
     });
-  } catch {
+  } catch (error: unknown) {
+    const storageFailure = resolveNoteStorageFailure(error);
+    if (storageFailure) {
+      return errorResponse(storageFailure.status, storageFailure.message, storageFailure.code);
+    }
+
+    if (usingCustomDatabase) {
+      return errorResponse(
+        503,
+        "Your custom MongoDB database is unavailable. Notes and folders stay in your database only, so pgnote cannot load or save them until that connection works again.",
+        inferInfraErrorCode(error, "CUSTOM_MONGO_REQUEST_FAILED")
+      );
+    }
+
+    logServerError("api/folders/get", error);
     return errorResponse(500, "Request failed.");
   }
 }
 
 export async function POST(request: NextRequest) {
+  let usingCustomDatabase = false;
+
   try {
     const session = await requireSession();
     if (!session) {
@@ -99,8 +119,10 @@ export async function POST(request: NextRequest) {
       return errorResponse(400, "Invalid request.");
     }
 
-    await connectToDatabase();
-    const createdFolder = await FolderModel.create({
+    const noteStorage = await getNoteStorageContextForUser(session.userId);
+    usingCustomDatabase = noteStorage.usingCustomDatabase;
+    const { folderModel } = noteStorage;
+    const createdFolder = await folderModel.create({
       userId: session.userId,
       name: parsed.data.name,
     });
@@ -118,10 +140,24 @@ export async function POST(request: NextRequest) {
       201
     );
   } catch (error: unknown) {
+    const storageFailure = resolveNoteStorageFailure(error);
+    if (storageFailure) {
+      return errorResponse(storageFailure.status, storageFailure.message, storageFailure.code);
+    }
+
     if ((error as MongoDuplicateKeyError).code === 11000) {
       return errorResponse(409, "Folder already exists.");
     }
 
+    if (usingCustomDatabase) {
+      return errorResponse(
+        503,
+        "Your custom MongoDB database is unavailable. Notes and folders stay in your database only, so pgnote cannot load or save them until that connection works again.",
+        inferInfraErrorCode(error, "CUSTOM_MONGO_REQUEST_FAILED")
+      );
+    }
+
+    logServerError("api/folders/post", error);
     return errorResponse(500, "Request failed.");
   }
 }

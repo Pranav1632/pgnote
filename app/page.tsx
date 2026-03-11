@@ -5,6 +5,25 @@ import { Button } from "@/components/ui/button";
 export default function HomePage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-zinc-950 text-zinc-100">
+      <div className="fixed right-4 bottom-4 z-20 flex flex-col gap-2 md:top-1/2 md:bottom-auto md:-translate-y-1/2">
+        <Button
+          asChild
+          size="sm"
+          variant="outline"
+          className="border-zinc-700 bg-zinc-950/85 text-zinc-100 backdrop-blur"
+        >
+          <Link href="/signup">/signup</Link>
+        </Button>
+        <Button
+          asChild
+          size="sm"
+          variant="outline"
+          className="border-zinc-700 bg-zinc-950/85 text-zinc-100 backdrop-blur"
+        >
+          <Link href="#open-slug">/{`{slug}`}</Link>
+        </Button>
+      </div>
+
       <div className="pointer-events-none absolute -top-40 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-cyan-500/20 blur-3xl" />
       <div className="pointer-events-none absolute top-32 right-0 h-80 w-80 rounded-full bg-orange-500/15 blur-3xl" />
       <div className="pointer-events-none absolute bottom-0 left-0 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />

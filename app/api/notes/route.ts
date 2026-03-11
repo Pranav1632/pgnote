@@ -1,14 +1,13 @@
 import { NextRequest } from "next/server";
-import { connectToDatabase } from "@/lib/db";
+import { inferInfraErrorCode, logServerError } from "@/lib/error-utils";
 import { errorResponse, successResponse } from "@/lib/http";
+import { getNoteStorageContextForUser, resolveNoteStorageFailure } from "@/lib/note-storage";
 import { requireSession, touchSession } from "@/lib/session";
 import {
   createNoteRequestSchema,
   listNotesQuerySchema,
   updateNoteRequestSchema,
 } from "@/lib/validators";
-import { FolderModel } from "@/models/Folder";
-import { NoteModel } from "@/models/Note";
 
 function toNoteDTO(note: {
   _id: unknown;
@@ -27,6 +26,8 @@ function toNoteDTO(note: {
 }
 
 export async function GET(request: NextRequest) {
+  let usingCustomDatabase = false;
+
   try {
     const session = await requireSession();
     if (!session) {
@@ -41,7 +42,9 @@ export async function GET(request: NextRequest) {
       return errorResponse(400, "Invalid request.");
     }
 
-    await connectToDatabase();
+    const noteStorage = await getNoteStorageContextForUser(session.userId);
+    usingCustomDatabase = noteStorage.usingCustomDatabase;
+    const { noteModel } = noteStorage;
     const filter: { userId: string; folderId?: string } = {
       userId: session.userId,
     };
@@ -49,7 +52,7 @@ export async function GET(request: NextRequest) {
       filter.folderId = query.data.folderId;
     }
 
-    const notes = await NoteModel.find(filter).sort({ updatedAt: -1 }).lean();
+    const notes = await noteModel.find(filter).sort({ updatedAt: -1 }).lean();
     const typedNotes = notes as Array<{
       _id: unknown;
       folderId: unknown;
@@ -70,12 +73,28 @@ export async function GET(request: NextRequest) {
         })
       ),
     });
-  } catch {
+  } catch (error: unknown) {
+    const storageFailure = resolveNoteStorageFailure(error);
+    if (storageFailure) {
+      return errorResponse(storageFailure.status, storageFailure.message, storageFailure.code);
+    }
+
+    if (usingCustomDatabase) {
+      return errorResponse(
+        503,
+        "Your custom MongoDB database is unavailable. Notes and folders stay in your database only, so pgnote cannot load or save them until that connection works again.",
+        inferInfraErrorCode(error, "CUSTOM_MONGO_REQUEST_FAILED")
+      );
+    }
+
+    logServerError("api/notes/get", error);
     return errorResponse(500, "Request failed.");
   }
 }
 
 export async function POST(request: NextRequest) {
+  let usingCustomDatabase = false;
+
   try {
     const session = await requireSession();
     if (!session) {
@@ -94,9 +113,11 @@ export async function POST(request: NextRequest) {
       return errorResponse(400, "Invalid request.");
     }
 
-    await connectToDatabase();
+    const noteStorage = await getNoteStorageContextForUser(session.userId);
+    usingCustomDatabase = noteStorage.usingCustomDatabase;
+    const { folderModel, noteModel } = noteStorage;
 
-    const folderExists = await FolderModel.exists({
+    const folderExists = await folderModel.exists({
       _id: parsed.data.folderId,
       userId: session.userId,
     });
@@ -104,7 +125,7 @@ export async function POST(request: NextRequest) {
       return errorResponse(404, "Request failed.");
     }
 
-    const createdNote = await NoteModel.create({
+    const createdNote = await noteModel.create({
       userId: session.userId,
       folderId: parsed.data.folderId,
       content: parsed.data.content,
@@ -124,12 +145,28 @@ export async function POST(request: NextRequest) {
       },
       201
     );
-  } catch {
+  } catch (error: unknown) {
+    const storageFailure = resolveNoteStorageFailure(error);
+    if (storageFailure) {
+      return errorResponse(storageFailure.status, storageFailure.message, storageFailure.code);
+    }
+
+    if (usingCustomDatabase) {
+      return errorResponse(
+        503,
+        "Your custom MongoDB database is unavailable. Notes and folders stay in your database only, so pgnote cannot load or save them until that connection works again.",
+        inferInfraErrorCode(error, "CUSTOM_MONGO_REQUEST_FAILED")
+      );
+    }
+
+    logServerError("api/notes/post", error);
     return errorResponse(500, "Request failed.");
   }
 }
 
 export async function PATCH(request: NextRequest) {
+  let usingCustomDatabase = false;
+
   try {
     const session = await requireSession();
     if (!session) {
@@ -148,10 +185,12 @@ export async function PATCH(request: NextRequest) {
       return errorResponse(400, "Invalid request.");
     }
 
-    await connectToDatabase();
+    const noteStorage = await getNoteStorageContextForUser(session.userId);
+    usingCustomDatabase = noteStorage.usingCustomDatabase;
+    const { folderModel, noteModel } = noteStorage;
 
     if (parsed.data.folderId) {
-      const folderExists = await FolderModel.exists({
+      const folderExists = await folderModel.exists({
         _id: parsed.data.folderId,
         userId: session.userId,
       });
@@ -167,7 +206,7 @@ export async function PATCH(request: NextRequest) {
       updateData.folderId = parsed.data.folderId;
     }
 
-    const updatedNote = await NoteModel.findOneAndUpdate(
+    const updatedNote = await noteModel.findOneAndUpdate(
       {
         _id: parsed.data.noteId,
         userId: session.userId,
@@ -195,7 +234,21 @@ export async function PATCH(request: NextRequest) {
         updatedAt: updatedNote.updatedAt,
       }),
     });
-  } catch {
+  } catch (error: unknown) {
+    const storageFailure = resolveNoteStorageFailure(error);
+    if (storageFailure) {
+      return errorResponse(storageFailure.status, storageFailure.message, storageFailure.code);
+    }
+
+    if (usingCustomDatabase) {
+      return errorResponse(
+        503,
+        "Your custom MongoDB database is unavailable. Notes and folders stay in your database only, so pgnote cannot load or save them until that connection works again.",
+        inferInfraErrorCode(error, "CUSTOM_MONGO_REQUEST_FAILED")
+      );
+    }
+
+    logServerError("api/notes/patch", error);
     return errorResponse(500, "Request failed.");
   }
 }

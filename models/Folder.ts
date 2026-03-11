@@ -42,3 +42,10 @@ folderSchema.index(
 );
 
 export const FolderModel = mongoose.models.Folder ?? mongoose.model<IFolder>("Folder", folderSchema);
+
+export function getFolderModel(connection: typeof FolderModel.db): typeof FolderModel {
+  return (
+    (connection.models.Folder as typeof FolderModel | undefined) ??
+    connection.model<IFolder>("Folder", folderSchema)
+  );
+}

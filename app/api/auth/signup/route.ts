@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { inferInfraErrorCode, logServerError } from "@/lib/error-utils";
 import { errorResponse, successResponse } from "@/lib/http";
+import { verifyMongoUriConnectivity } from "@/lib/mongo-uri";
 import { signupRequestSchema } from "@/lib/validators";
 import { UserModel } from "@/models/User";
 
@@ -60,11 +61,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (parsed.data.customMongoUri) {
+      const customMongoUriVerified = await verifyMongoUriConnectivity(parsed.data.customMongoUri);
+      if (!customMongoUriVerified) {
+        return errorResponse(
+          400,
+          "Unable to verify the custom MongoDB URI. Check the database name, credentials, and network access.",
+          "CUSTOM_MONGO_UNREACHABLE"
+        );
+      }
+    }
+
     const createdUser = await UserModel.create({
       slug: parsed.data.slug,
       algo: parsed.data.algo,
       sessionTimeout: parsed.data.sessionTimeout,
       recoveryEmail: parsed.data.recoveryEmail,
+      customMongoUri: parsed.data.customMongoUri,
     });
 
     return successResponse(

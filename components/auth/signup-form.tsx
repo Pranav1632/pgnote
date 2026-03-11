@@ -7,6 +7,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { AlgoBuilder } from "@/components/auth/algo-builder";
 import { Button } from "@/components/ui/button";
+import { hasMongoDatabaseName, MONGO_URI_REGEX } from "@/lib/mongo-uri-format";
 import {
   MAX_KEY_LENGTH,
   MIN_KEY_LENGTH,
@@ -16,10 +17,21 @@ import {
 
 const SLUG_REGEX = /^[a-z0-9][a-z0-9_-]{2,31}$/;
 const EMAIL_SCHEMA = z.string().trim().email("Enter a valid email.");
+const CUSTOM_MONGO_URI_SCHEMA = z
+  .string()
+  .trim()
+  .max(2048, "MongoDB URI is too long.")
+  .refine((value) => value.length === 0 || MONGO_URI_REGEX.test(value), "Enter a valid MongoDB URI.")
+  .refine(
+    (value) => value.length === 0 || hasMongoDatabaseName(value),
+    "MongoDB URI must include a database name."
+  );
 const INPUT_CLASS =
   "w-full rounded-md border border-[#333] bg-black px-3 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-[#0070f3] focus:ring-2 focus:ring-[#0070f3]/30";
 const BUTTON_CLASS =
   "rounded-md border border-[#333] bg-black text-white transition hover:bg-[#111] disabled:opacity-50";
+const CUSTOM_MONGO_DEFAULT_MESSAGE =
+  "Optional. Leave blank to keep notes and folders in pgnote's managed database.";
 
 const signupFormSchema = z
   .object({
@@ -38,6 +50,7 @@ const signupFormSchema = z
       .min(1, "Recovery email is required.")
       .max(320)
       .pipe(z.string().email("Enter a valid email.").transform((value) => value.toLowerCase())),
+    customMongoUri: CUSTOM_MONGO_URI_SCHEMA,
     sessionTimeoutPreset: z.enum(["2", "5", "10", "30", "custom"]),
     customSessionTimeout: z.number().int().min(1).max(1440).optional(),
   })
@@ -58,6 +71,12 @@ type AvailabilityState =
   | { status: "checking"; message: string }
   | { status: "available"; message: string }
   | { status: "taken"; message: string }
+  | { status: "error"; message: string };
+
+type MongoUriVerificationState =
+  | { status: "idle"; message: string }
+  | { status: "checking"; message: string }
+  | { status: "verified"; message: string }
   | { status: "error"; message: string };
 
 function appendErrorCode(message: string, code?: string): string {
@@ -93,6 +112,10 @@ export function SignupForm() {
     status: "idle",
     message: "Required for recovery. We only send recovery mail to this address.",
   });
+  const [mongoUriVerification, setMongoUriVerification] = useState<MongoUriVerificationState>({
+    status: "idle",
+    message: CUSTOM_MONGO_DEFAULT_MESSAGE,
+  });
   const [algoError, setAlgoError] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -102,6 +125,7 @@ export function SignupForm() {
       slug: "",
       keyLength: MIN_KEY_LENGTH,
       recoveryEmail: "",
+      customMongoUri: "",
       sessionTimeoutPreset: "10",
       customSessionTimeout: 15,
     },
@@ -112,7 +136,9 @@ export function SignupForm() {
   const keyLength = useWatch({ control: form.control, name: "keyLength" }) ?? MIN_KEY_LENGTH;
   const timeoutPreset = useWatch({ control: form.control, name: "sessionTimeoutPreset" }) ?? "10";
   const recoveryEmailValue = useWatch({ control: form.control, name: "recoveryEmail" }) ?? "";
+  const customMongoUriValue = useWatch({ control: form.control, name: "customMongoUri" }) ?? "";
   const recoveryEmailTouched = form.formState.touchedFields.recoveryEmail;
+  const customMongoUriTouched = form.formState.touchedFields.customMongoUri;
   const isSubmitted = form.formState.isSubmitted;
 
   const debouncedSlugCheck = useMemo(
@@ -274,6 +300,118 @@ export function SignupForm() {
     []
   );
 
+  const verifyCustomMongoUri = useMemo(
+    () =>
+      async (rawCustomMongoUri: string) => {
+        const normalized = rawCustomMongoUri.trim();
+        if (normalized.length === 0) {
+          setMongoUriVerification({
+            status: "idle",
+            message: CUSTOM_MONGO_DEFAULT_MESSAGE,
+          });
+          return {
+            ok: true as const,
+            normalized: "",
+          };
+        }
+
+        const parsedMongoUri = CUSTOM_MONGO_URI_SCHEMA.safeParse(normalized);
+        if (!parsedMongoUri.success) {
+          const message = parsedMongoUri.error.issues[0]?.message ?? "Enter a valid MongoDB URI.";
+          setMongoUriVerification({
+            status: "error",
+            message,
+          });
+          return {
+            ok: false as const,
+            message,
+          };
+        }
+
+        setMongoUriVerification({
+          status: "checking",
+          message: "Verifying MongoDB connection...",
+        });
+
+        try {
+          const response = await fetch("/api/user/mongo-uri-check", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ mongoUri: normalized }),
+          });
+
+          const payload = (await response.json()) as {
+            success?: boolean;
+            data?: { verified?: boolean; message?: string; databaseName?: string | null };
+            message?: string;
+            code?: string;
+          };
+
+          if (!response.ok || !payload.success || typeof payload.data?.verified !== "boolean") {
+            const message = appendErrorCode(
+              payload.message ?? "Unable to verify MongoDB URI right now.",
+              payload.code
+            );
+            setMongoUriVerification({
+              status: "error",
+              message,
+            });
+            return {
+              ok: false as const,
+              message,
+            };
+          }
+
+          const message =
+            payload.data.message ??
+            (payload.data.verified
+              ? "MongoDB URI verified."
+              : "Could not connect to this MongoDB URI.");
+
+          if (!payload.data.verified) {
+            setMongoUriVerification({
+              status: "error",
+              message,
+            });
+            return {
+              ok: false as const,
+              message,
+            };
+          }
+
+          setMongoUriVerification({
+            status: "verified",
+            message,
+          });
+          return {
+            ok: true as const,
+            normalized,
+          };
+        } catch {
+          const message = "Unable to verify MongoDB URI right now.";
+          setMongoUriVerification({
+            status: "error",
+            message,
+          });
+          return {
+            ok: false as const,
+            message,
+          };
+        }
+      },
+    []
+  );
+
+  const debouncedMongoUriCheck = useMemo(
+    () =>
+      debounce((rawCustomMongoUri: string) => {
+        void verifyCustomMongoUri(rawCustomMongoUri);
+      }, 650),
+    [verifyCustomMongoUri]
+  );
+
   useEffect(() => {
     debouncedSlugCheck(slugValue);
     return () => {
@@ -287,6 +425,13 @@ export function SignupForm() {
       debouncedRecoveryEmailCheck.clear();
     };
   }, [recoveryEmailValue, debouncedRecoveryEmailCheck]);
+
+  useEffect(() => {
+    debouncedMongoUriCheck(customMongoUriValue);
+    return () => {
+      debouncedMongoUriCheck.clear();
+    };
+  }, [customMongoUriValue, debouncedMongoUriCheck]);
 
   useEffect(() => {
     const trimmed = recoveryEmailValue.trim();
@@ -313,6 +458,33 @@ export function SignupForm() {
     form.clearErrors("recoveryEmail");
   }, [recoveryEmailValue, form, isSubmitted, recoveryEmailTouched]);
 
+  useEffect(() => {
+    const trimmed = customMongoUriValue.trim();
+    if (trimmed.length === 0) {
+      form.clearErrors("customMongoUri");
+      return;
+    }
+
+    const parsedMongoUri = CUSTOM_MONGO_URI_SCHEMA.safeParse(trimmed);
+    if (!parsedMongoUri.success) {
+      form.setError("customMongoUri", {
+        type: "manual",
+        message: parsedMongoUri.error.issues[0]?.message ?? "Enter a valid MongoDB URI.",
+      });
+      return;
+    }
+
+    if (mongoUriVerification.status === "error" && (customMongoUriTouched || isSubmitted)) {
+      form.setError("customMongoUri", {
+        type: "manual",
+        message: mongoUriVerification.message,
+      });
+      return;
+    }
+
+    form.clearErrors("customMongoUri");
+  }, [customMongoUriTouched, customMongoUriValue, form, isSubmitted, mongoUriVerification]);
+
   const onSubmit = form.handleSubmit(async (values) => {
     setServerError(null);
     setAlgoError(null);
@@ -323,6 +495,7 @@ export function SignupForm() {
       ...values,
       slug: values.slug.trim().toLowerCase(),
       recoveryEmail: values.recoveryEmail.trim().toLowerCase(),
+      customMongoUri: values.customMongoUri.trim(),
     });
 
     if (!parsedValues.success) {
@@ -332,6 +505,7 @@ export function SignupForm() {
           fieldName === "slug" ||
           fieldName === "keyLength" ||
           fieldName === "recoveryEmail" ||
+          fieldName === "customMongoUri" ||
           fieldName === "sessionTimeoutPreset" ||
           fieldName === "customSessionTimeout"
         ) {
@@ -378,6 +552,22 @@ export function SignupForm() {
       return;
     }
 
+    let verifiedCustomMongoUri: string | undefined;
+    if (parsedValues.data.customMongoUri.length > 0) {
+      const customMongoUriResult = await verifyCustomMongoUri(parsedValues.data.customMongoUri);
+      if (!customMongoUriResult.ok) {
+        form.setError("customMongoUri", {
+          type: "manual",
+          message: customMongoUriResult.message,
+        });
+        setServerError(customMongoUriResult.message);
+        setIsSubmitting(false);
+        return;
+      }
+
+      verifiedCustomMongoUri = parsedValues.data.customMongoUri;
+    }
+
     try {
       const response = await fetch("/api/auth/signup", {
         method: "POST",
@@ -389,6 +579,7 @@ export function SignupForm() {
           algo,
           sessionTimeout: timeoutMinutes,
           recoveryEmail: parsedValues.data.recoveryEmail,
+          customMongoUri: verifiedCustomMongoUri,
         }),
       });
 
@@ -419,6 +610,17 @@ export function SignupForm() {
           form.setError("recoveryEmail", {
             type: "manual",
             message: "Recovery email is already registered.",
+          });
+        }
+
+        if (payload.code === "CUSTOM_MONGO_UNREACHABLE") {
+          setMongoUriVerification({
+            status: "error",
+            message: payload.message ?? "Unable to verify the custom MongoDB URI.",
+          });
+          form.setError("customMongoUri", {
+            type: "manual",
+            message: payload.message ?? "Unable to verify the custom MongoDB URI.",
           });
         }
 
@@ -495,6 +697,46 @@ export function SignupForm() {
               }`}
             >
               {recoveryEmailAvailability.message}
+            </p>
+          </div>
+
+          <div className="lg:col-span-2">
+            <label className="mb-2 block text-sm font-medium text-zinc-200">
+              Custom MongoDB URI (optional)
+            </label>
+            <input
+              type="text"
+              {...form.register("customMongoUri")}
+              placeholder="mongodb+srv://user:password@cluster.example.net/pgnote-notes?retryWrites=true&w=majority"
+              autoComplete="off"
+              spellCheck={false}
+              className={INPUT_CLASS}
+            />
+            <p className="mt-1 text-xs leading-5 text-zinc-400">
+              Optional. If verified, only folders and notes are stored in your MongoDB database.
+              Your slug, recovery email, login algo structure, and session metadata stay in
+              pgnote&apos;s main database.
+            </p>
+            <p className="mt-1 text-xs leading-5 text-zinc-500">
+              Warning: keep this URI secret. Live verification checks database name format and
+              current connectivity, but later permission, billing, allowlist, or network changes
+              can still stop note access.
+            </p>
+            {form.formState.errors.customMongoUri && (
+              <p className="mt-1 text-sm text-rose-400">
+                {form.formState.errors.customMongoUri.message}
+              </p>
+            )}
+            <p
+              className={`mt-1 text-sm ${
+                mongoUriVerification.status === "verified"
+                  ? "text-emerald-400"
+                  : mongoUriVerification.status === "error"
+                    ? "text-rose-400"
+                    : "text-zinc-400"
+              }`}
+            >
+              {mongoUriVerification.message}
             </p>
           </div>
 

@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ChallengeLoginForm } from "@/components/auth/challenge-login-form";
+import { Button } from "@/components/ui/button";
 import { connectToDatabase } from "@/lib/db";
 import { requireValidSession } from "@/lib/session";
 import { UserModel } from "@/models/User";
@@ -38,6 +40,25 @@ export default async function SlugLoginPage({ params }: SlugLoginPageProps) {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-zinc-950 text-zinc-100">
+      <div className="fixed right-4 bottom-4 z-20 flex flex-col gap-2 md:top-1/2 md:bottom-auto md:-translate-y-1/2">
+        <Button
+          asChild
+          size="sm"
+          variant="outline"
+          className="border-zinc-700 bg-zinc-950/85 text-zinc-100 backdrop-blur"
+        >
+          <Link href="/">Home</Link>
+        </Button>
+        <Button
+          asChild
+          size="sm"
+          variant="outline"
+          className="border-zinc-700 bg-zinc-950/85 text-zinc-100 backdrop-blur"
+        >
+          <Link href="/signup">/signup</Link>
+        </Button>
+      </div>
+
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,#18181b_0%,#09090b_50%,#020617_100%)]" />
       <div className="absolute inset-0 opacity-30 [background:linear-gradient(130deg,transparent_0%,rgba(63,63,70,0.55)_42%,transparent_100%)]" />
 

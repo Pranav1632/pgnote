@@ -25,7 +25,7 @@ export function SlugAccessForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="mt-6 w-full max-w-md space-y-2">
+    <form id="open-slug" onSubmit={handleSubmit} className="mt-6 w-full max-w-md space-y-2">
       <label htmlFor="quick-slug" className="block text-left text-sm text-zinc-300">
         Open your slug
       </label>
