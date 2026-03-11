@@ -84,7 +84,7 @@ const latestWork = [
   {
     title: "Timeout-aware security",
     description:
-      "Session countdown, warnings, and slug-based challenge login make the project act like a private controlled workspace.",
+      "Session countdown, warnings, and slug-based challenge login make the app act like a private controlled workspace.",
     icon: Clock3,
   },
 ];
@@ -166,7 +166,7 @@ export default function HomePage() {
       <div className="relative mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 md:px-8 md:py-24">
         <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-start">
           <div className="rounded-[2rem] border border-zinc-800 bg-zinc-950/80 p-6 shadow-[0_25px_80px_rgba(0,0,0,0.35)] backdrop-blur md:p-8">
-            <p className="mb-4 text-xs tracking-[0.32em] text-zinc-500 uppercase">pgnote / project overview</p>
+            <p className="mb-4 text-xs tracking-[0.32em] text-zinc-500 uppercase">pgnote  overview</p>
 
             <h1 className="max-w-4xl text-4xl leading-tight font-semibold tracking-tight text-zinc-100 md:text-6xl">
               Private notes with
@@ -191,7 +191,7 @@ export default function HomePage() {
                 <Link href="/signup">Create Your Slug</Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="sm:min-w-[168px]">
-                <Link href="#project-flow">See Project Flow</Link>
+                <Link href="#project-flow">See App Flow</Link>
               </Button>
             </div>
 
@@ -240,7 +240,7 @@ export default function HomePage() {
         <section id="project-flow" className="mt-12 rounded-[2rem] border border-zinc-800 bg-zinc-900/55 p-5 sm:p-6 md:p-7">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-xs tracking-[0.28em] text-zinc-500 uppercase">Project Flow</p>
+              <p className="text-xs tracking-[0.28em] text-zinc-500 uppercase">app Flow</p>
               <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-100">
                 Clear route flow with a more guided entry path
               </h2>
