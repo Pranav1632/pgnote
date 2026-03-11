@@ -46,6 +46,9 @@ export default async function SlugLoginPage({ params }: SlugLoginPageProps) {
           <p className="text-xs tracking-[0.28em] text-zinc-500 uppercase">pgnote / challenge login</p>
           <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">/{normalizedSlug}</h1>
           <p className="text-zinc-400">Use your algorithm-generated challenge to access your notes.</p>
+          <p className="text-sm text-zinc-500">
+            Recovery mail is sent only to the email registered for this slug.
+          </p>
         </header>
 
         <div className="rounded-3xl border border-zinc-800 bg-zinc-900/55 p-5 shadow-2xl backdrop-blur md:p-8">

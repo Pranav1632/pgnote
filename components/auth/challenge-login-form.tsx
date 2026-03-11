@@ -24,7 +24,6 @@ export function ChallengeLoginForm({ slug }: ChallengeLoginFormProps) {
   const [isLoadingChallenge, setIsLoadingChallenge] = useState(true);
   const [isVerifying, setIsVerifying] = useState(false);
   const [showRecoveryPanel, setShowRecoveryPanel] = useState(false);
-  const [recoveryEmail, setRecoveryEmail] = useState("");
   const [recoveryStatus, setRecoveryStatus] = useState<string | null>(null);
   const [isSendingRecovery, setIsSendingRecovery] = useState(false);
 
@@ -155,11 +154,6 @@ export function ChallengeLoginForm({ slug }: ChallengeLoginFormProps) {
   };
 
   const handleRecoverySubmit = async () => {
-    if (!recoveryEmail.trim()) {
-      setRecoveryStatus("Enter your recovery email.");
-      return;
-    }
-
     setIsSendingRecovery(true);
     setRecoveryStatus(null);
 
@@ -171,7 +165,6 @@ export function ChallengeLoginForm({ slug }: ChallengeLoginFormProps) {
         },
         body: JSON.stringify({
           slug: normalizedSlug,
-          email: recoveryEmail.trim().toLowerCase(),
         }),
       });
 
@@ -184,12 +177,12 @@ export function ChallengeLoginForm({ slug }: ChallengeLoginFormProps) {
       const message =
         payload.data?.message ??
         payload.message ??
-        "If the details match our records, we will email your algorithm recovery instructions.";
+        "If a recovery email is registered for this slug, we will email your algorithm recovery instructions.";
 
       setRecoveryStatus(message);
     } catch {
       setRecoveryStatus(
-        "If the details match our records, we will email your algorithm recovery instructions."
+        "If a recovery email is registered for this slug, we will email your algorithm recovery instructions."
       );
     } finally {
       setIsSendingRecovery(false);
@@ -248,30 +241,19 @@ export function ChallengeLoginForm({ slug }: ChallengeLoginFormProps) {
       {showRecoveryPanel && (
         <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
           <p className="text-sm text-zinc-300">
-            Enter the recovery email you configured during signup. We will send your algo details
-            if the account and email match.
+            We will send your recovery instructions only to the email registered for this slug.
           </p>
-          <div className="space-y-2">
-            <input
-              type="email"
-              value={recoveryEmail}
-              onChange={(event) => setRecoveryEmail(event.target.value)}
-              autoComplete="email"
-              placeholder="you@example.com"
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-400"
-            />
-            <Button
-              type="button"
-              size="sm"
-              className="w-full"
-              disabled={isSendingRecovery}
-              onClick={() => {
-                void handleRecoverySubmit();
-              }}
-            >
-              {isSendingRecovery ? "Sending..." : "Send Recovery Email"}
-            </Button>
-          </div>
+          <Button
+            type="button"
+            size="sm"
+            className="w-full"
+            disabled={isSendingRecovery}
+            onClick={() => {
+              void handleRecoverySubmit();
+            }}
+          >
+            {isSendingRecovery ? "Sending..." : "Send Recovery Email"}
+          </Button>
           {recoveryStatus && <p className="text-sm text-zinc-400">{recoveryStatus}</p>}
         </div>
       )}

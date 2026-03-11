@@ -5,7 +5,7 @@ export interface UserDTO {
   slug: string;
   algo: PasskeyAlgo;
   sessionTimeout: number;
-  recoveryEmail?: string; 
+  recoveryEmail: string;
   createdAt: string;
   lastLogin?: string;
 }

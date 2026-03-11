@@ -8,7 +8,7 @@ import { recoveryRequestSchema } from "@/lib/validators";
 import { UserModel } from "@/models/User";
 
 const GENERIC_MESSAGE =
-  "If the details match our records, we will email your algorithm recovery instructions.";
+  "If a recovery email is registered for this slug, we will email your algorithm recovery instructions.";
 
 function genericRecoveryResponse() {
   return successResponse({
@@ -42,12 +42,12 @@ export async function POST(request: NextRequest) {
       .select("slug recoveryEmail algo")
       .lean();
 
-    if (!user || typeof user.recoveryEmail !== "string" || user.recoveryEmail !== parsed.data.email) {
+    if (!user || typeof user.recoveryEmail !== "string" || user.recoveryEmail.length === 0) {
       return genericRecoveryResponse();
     }
 
     await sendRecoveryAlgoEmail({
-      to: parsed.data.email,
+      to: user.recoveryEmail,
       slug: user.slug,
       algo: user.algo,
     });

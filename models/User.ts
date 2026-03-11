@@ -15,7 +15,7 @@ export interface IUser {
   slug: string;
   algo: PasskeyAlgo;
   sessionTimeout: number;
-  recoveryEmail?: string;
+  recoveryEmail: string;
   customMongoUri?: string;
   createdAt: Date;
   lastLogin?: Date;
@@ -101,10 +101,10 @@ const userSchema = new Schema<IUser>(
     },
     recoveryEmail: {
       type: String,
+      required: true,
       trim: true,
       lowercase: true,
       maxlength: 320,
-      default: undefined,
     },
     customMongoUri: {
       type: String,
@@ -126,15 +126,15 @@ const userSchema = new Schema<IUser>(
   }
 );
 
-userSchema.index({ recoveryEmail: 1 }, { sparse: true });
+userSchema.index({ recoveryEmail: 1 }, { unique: true, sparse: true });
 
 userSchema.pre(
   "validate",
   function validatePasskeyAlgo(this: IUser & { invalidate(path: string, message: string): void }) {
-  const result = validateAlgo(this.algo);
-  if (!result.valid) {
-    this.invalidate("algo", result.error ?? "Invalid passkey algo.");
-  }
+    const result = validateAlgo(this.algo);
+    if (!result.valid) {
+      this.invalidate("algo", result.error ?? "Invalid passkey algo.");
+    }
   }
 );
 

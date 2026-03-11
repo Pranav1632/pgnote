@@ -7,7 +7,7 @@ export interface SignupPayload {
   slug: string;
   algo: PasskeyAlgo;
   sessionTimeout: SessionTimeoutOption;
-  recoveryEmail?: string;
+  recoveryEmail: string;
   customMongoUri?: string;
 }
 

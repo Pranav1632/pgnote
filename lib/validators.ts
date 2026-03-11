@@ -43,15 +43,12 @@ export const passkeyAlgoSchema = z
 
 export const sessionTimeoutSchema = z.number().int().min(1).max(1440);
 
-export const recoveryEmailSchema = z.preprocess(
-  (value) => {
-    if (typeof value === "string" && value.trim().length === 0) {
-      return undefined;
-    }
-    return value;
-  },
-  z.string().trim().toLowerCase().email().max(320).optional()
-);
+export const recoveryEmailSchema = z
+  .string()
+  .trim()
+  .min(1, "Recovery email is required.")
+  .max(320)
+  .pipe(z.string().email("Enter a valid email.").transform((value) => value.toLowerCase()));
 
 export const customMongoUriSchema = z.preprocess(
   (value) => {
@@ -75,6 +72,10 @@ export const slugCheckRequestSchema = z.object({
   slug: slugSchema,
 });
 
+export const recoveryEmailCheckRequestSchema = z.object({
+  recoveryEmail: recoveryEmailSchema,
+});
+
 export const challengeRequestSchema = z.object({
   slug: slugSchema,
 });
@@ -87,7 +88,6 @@ export const verifyChallengeRequestSchema = z.object({
 
 export const recoveryRequestSchema = z.object({
   slug: slugSchema,
-  email: z.string().trim().toLowerCase().email().max(320),
 });
 
 export const mongoUriVerifyRequestSchema = z.object({

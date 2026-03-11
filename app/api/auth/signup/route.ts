@@ -7,6 +7,24 @@ import { UserModel } from "@/models/User";
 
 interface MongoDuplicateKeyError extends Error {
   code?: number;
+  keyPattern?: Record<string, unknown>;
+  keyValue?: Record<string, unknown>;
+}
+
+function duplicateSignupResponse(error: MongoDuplicateKeyError) {
+  if (error.code !== 11000) {
+    return null;
+  }
+
+  if (error.keyPattern?.recoveryEmail || "recoveryEmail" in (error.keyValue ?? {})) {
+    return errorResponse(
+      409,
+      "Recovery email is already registered.",
+      "RECOVERY_EMAIL_ALREADY_EXISTS"
+    );
+  }
+
+  return errorResponse(409, "Slug is already taken.", "SLUG_ALREADY_EXISTS");
 }
 
 export async function POST(request: NextRequest) {
@@ -25,9 +43,21 @@ export async function POST(request: NextRequest) {
 
     await connectToDatabase();
 
-    const existingUser = await UserModel.exists({ slug: parsed.data.slug });
-    if (existingUser) {
-      return errorResponse(409, "Unable to create account.", "SLUG_ALREADY_EXISTS");
+    const [existingSlugUser, existingRecoveryEmailUser] = await Promise.all([
+      UserModel.exists({ slug: parsed.data.slug }),
+      UserModel.exists({ recoveryEmail: parsed.data.recoveryEmail }),
+    ]);
+
+    if (existingSlugUser) {
+      return errorResponse(409, "Slug is already taken.", "SLUG_ALREADY_EXISTS");
+    }
+
+    if (existingRecoveryEmailUser) {
+      return errorResponse(
+        409,
+        "Recovery email is already registered.",
+        "RECOVERY_EMAIL_ALREADY_EXISTS"
+      );
     }
 
     const createdUser = await UserModel.create({
@@ -45,8 +75,9 @@ export async function POST(request: NextRequest) {
       201
     );
   } catch (error: unknown) {
-    if ((error as MongoDuplicateKeyError).code === 11000) {
-      return errorResponse(409, "Unable to create account.", "SLUG_ALREADY_EXISTS");
+    const duplicateResponse = duplicateSignupResponse(error as MongoDuplicateKeyError);
+    if (duplicateResponse) {
+      return duplicateResponse;
     }
 
     const errorCode = inferInfraErrorCode(error, "SIGNUP_FAILED");

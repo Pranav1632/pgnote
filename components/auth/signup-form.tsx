@@ -35,9 +35,9 @@ const signupFormSchema = z
     recoveryEmail: z
       .string()
       .trim()
-      .email("Enter a valid email.")
-      .optional()
-      .or(z.literal("")),
+      .min(1, "Recovery email is required.")
+      .max(320)
+      .pipe(z.string().email("Enter a valid email.").transform((value) => value.toLowerCase())),
     sessionTimeoutPreset: z.enum(["2", "5", "10", "30", "custom"]),
     customSessionTimeout: z.number().int().min(1).max(1440).optional(),
   })
@@ -53,7 +53,7 @@ const signupFormSchema = z
 
 type SignupFormValues = z.infer<typeof signupFormSchema>;
 
-type SlugAvailabilityState =
+type AvailabilityState =
   | { status: "idle"; message: string }
   | { status: "checking"; message: string }
   | { status: "available"; message: string }
@@ -85,9 +85,13 @@ export function SignupForm() {
   const router = useRouter();
   const [chunks, setChunks] = useState<ChunkConfig[]>([{ from: 0, to: MIN_KEY_LENGTH - 1, reverse: false }]);
   const [order, setOrder] = useState<number[]>([0]);
-  const [slugAvailability, setSlugAvailability] = useState<SlugAvailabilityState>({
+  const [slugAvailability, setSlugAvailability] = useState<AvailabilityState>({
     status: "idle",
     message: "Pick your permanent URL slug.",
+  });
+  const [recoveryEmailAvailability, setRecoveryEmailAvailability] = useState<AvailabilityState>({
+    status: "idle",
+    message: "Required for recovery. We only send recovery mail to this address.",
   });
   const [algoError, setAlgoError] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -108,6 +112,8 @@ export function SignupForm() {
   const keyLength = useWatch({ control: form.control, name: "keyLength" }) ?? MIN_KEY_LENGTH;
   const timeoutPreset = useWatch({ control: form.control, name: "sessionTimeoutPreset" }) ?? "10";
   const recoveryEmailValue = useWatch({ control: form.control, name: "recoveryEmail" }) ?? "";
+  const recoveryEmailTouched = form.formState.touchedFields.recoveryEmail;
+  const isSubmitted = form.formState.isSubmitted;
 
   const debouncedSlugCheck = useMemo(
     () =>
@@ -183,6 +189,91 @@ export function SignupForm() {
     []
   );
 
+  const debouncedRecoveryEmailCheck = useMemo(
+    () =>
+      debounce(async (rawRecoveryEmail: string) => {
+        const normalized = rawRecoveryEmail.trim().toLowerCase();
+
+        if (normalized.length === 0) {
+          setRecoveryEmailAvailability({
+            status: "idle",
+            message: "Recovery email is required.",
+          });
+          return;
+        }
+
+        if (!EMAIL_SCHEMA.safeParse(normalized).success) {
+          setRecoveryEmailAvailability({
+            status: "idle",
+            message: "Enter a valid email.",
+          });
+          return;
+        }
+
+        setRecoveryEmailAvailability({
+          status: "checking",
+          message: "Checking recovery email availability...",
+        });
+
+        try {
+          const response = await fetch("/api/user/recovery-email-check", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ recoveryEmail: normalized }),
+          });
+
+          const payload = (await response.json()) as {
+            success?: boolean;
+            data?: { available?: boolean };
+            message?: string;
+            code?: string;
+          };
+
+          if (!response.ok) {
+            setRecoveryEmailAvailability({
+              status: "error",
+              message: appendErrorCode(
+                payload.message ?? "Unable to check recovery email right now.",
+                payload.code
+              ),
+            });
+            return;
+          }
+
+          if (!payload.success || typeof payload.data?.available !== "boolean") {
+            setRecoveryEmailAvailability({
+              status: "error",
+              message: appendErrorCode(
+                payload.message ?? "Unable to check recovery email right now.",
+                payload.code
+              ),
+            });
+            return;
+          }
+
+          if (payload.data.available) {
+            setRecoveryEmailAvailability({
+              status: "available",
+              message: "Recovery email is available.",
+            });
+          } else {
+            setRecoveryEmailAvailability({
+              status: "taken",
+              message: "Recovery email is already used.",
+            });
+          }
+        } catch {
+          setRecoveryEmailAvailability({
+            status: "error",
+            message: "Unable to check recovery email right now.",
+          });
+        }
+      }, 450),
+    []
+  );
+
   useEffect(() => {
     debouncedSlugCheck(slugValue);
     return () => {
@@ -191,9 +282,23 @@ export function SignupForm() {
   }, [slugValue, debouncedSlugCheck]);
 
   useEffect(() => {
+    debouncedRecoveryEmailCheck(recoveryEmailValue);
+    return () => {
+      debouncedRecoveryEmailCheck.clear();
+    };
+  }, [recoveryEmailValue, debouncedRecoveryEmailCheck]);
+
+  useEffect(() => {
     const trimmed = recoveryEmailValue.trim();
     if (trimmed.length === 0) {
-      form.clearErrors("recoveryEmail");
+      if (recoveryEmailTouched || isSubmitted) {
+        form.setError("recoveryEmail", {
+          type: "manual",
+          message: "Recovery email is required.",
+        });
+      } else {
+        form.clearErrors("recoveryEmail");
+      }
       return;
     }
 
@@ -206,7 +311,7 @@ export function SignupForm() {
     }
 
     form.clearErrors("recoveryEmail");
-  }, [recoveryEmailValue, form]);
+  }, [recoveryEmailValue, form, isSubmitted, recoveryEmailTouched]);
 
   const onSubmit = form.handleSubmit(async (values) => {
     setServerError(null);
@@ -217,7 +322,7 @@ export function SignupForm() {
     const parsedValues = signupFormSchema.safeParse({
       ...values,
       slug: values.slug.trim().toLowerCase(),
-      recoveryEmail: values.recoveryEmail?.trim() ?? "",
+      recoveryEmail: values.recoveryEmail.trim().toLowerCase(),
     });
 
     if (!parsedValues.success) {
@@ -263,6 +368,16 @@ export function SignupForm() {
       return;
     }
 
+    if (recoveryEmailAvailability.status === "taken") {
+      form.setError("recoveryEmail", {
+        type: "manual",
+        message: "Recovery email is already registered.",
+      });
+      setServerError("Recovery email is already registered. Use another email.");
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const response = await fetch("/api/auth/signup", {
         method: "POST",
@@ -273,9 +388,7 @@ export function SignupForm() {
           slug: parsedValues.data.slug,
           algo,
           sessionTimeout: timeoutMinutes,
-          recoveryEmail: parsedValues.data.recoveryEmail
-            ? parsedValues.data.recoveryEmail.trim().toLowerCase()
-            : undefined,
+          recoveryEmail: parsedValues.data.recoveryEmail,
         }),
       });
 
@@ -287,6 +400,28 @@ export function SignupForm() {
       };
 
       if (!response.ok || !payload.success || !payload.data?.redirectTo) {
+        if (payload.code === "SLUG_ALREADY_EXISTS") {
+          setSlugAvailability({
+            status: "taken",
+            message: "Slug is already taken.",
+          });
+          form.setError("slug", {
+            type: "manual",
+            message: "Slug is already taken.",
+          });
+        }
+
+        if (payload.code === "RECOVERY_EMAIL_ALREADY_EXISTS") {
+          setRecoveryEmailAvailability({
+            status: "taken",
+            message: "Recovery email is already used.",
+          });
+          form.setError("recoveryEmail", {
+            type: "manual",
+            message: "Recovery email is already registered.",
+          });
+        }
+
         setServerError(
           appendErrorCode(payload.message ?? "Unable to create account.", payload.code)
         );
@@ -335,20 +470,32 @@ export function SignupForm() {
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-zinc-200">Recovery Email (optional)</label>
+            <label className="mb-2 block text-sm font-medium text-zinc-200">Recovery Email</label>
             <input
               type="email"
               {...form.register("recoveryEmail")}
               placeholder="you@example.com"
+              autoComplete="email"
               className={INPUT_CLASS}
             />
             <p className="mt-1 text-xs leading-5 text-zinc-400">
-              If you forget your algo, we email it to you. Your algo is not sensitive - it
-              contains no keys or passwords.
+              Required. If you forget your algo, recovery details for this account are sent only
+              to this email.
             </p>
             {form.formState.errors.recoveryEmail && (
               <p className="mt-1 text-sm text-rose-400">{form.formState.errors.recoveryEmail.message}</p>
             )}
+            <p
+              className={`mt-1 text-sm ${
+                recoveryEmailAvailability.status === "available"
+                  ? "text-emerald-400"
+                  : recoveryEmailAvailability.status === "taken"
+                    ? "text-rose-400"
+                    : "text-zinc-400"
+              }`}
+            >
+              {recoveryEmailAvailability.message}
+            </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:col-span-2">
