@@ -161,6 +161,7 @@ export default function HomePage() {
       <div className="pointer-events-none absolute top-32 right-0 h-80 w-80 rounded-full bg-orange-500/15 blur-3xl" />
       <div className="pointer-events-none absolute bottom-0 left-0 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
       <div className="pointer-events-none absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(39,39,42,0.35)_1px,transparent_1px),linear-gradient(90deg,rgba(39,39,42,0.35)_1px,transparent_1px)] [background-size:30px_30px]" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-72 bg-[linear-gradient(180deg,transparent,rgba(255,255,255,0.03))]" />
 
       <div className="relative mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 md:px-8 md:py-24">
         <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-start">
@@ -285,7 +286,7 @@ export default function HomePage() {
                 of memory, and the notes space becomes tied to that personal entry flow.
               </p>
               <p>
-                The biggest difference is choice. A user can keep notes in pgnote's managed database
+                The biggest difference is choice. A user can keep notes in pgnote&apos;s managed database
                 or connect their own MongoDB database for note and folder storage, while account
                 metadata still stays safely in the main app database.
               </p>
@@ -305,34 +306,6 @@ export default function HomePage() {
                   </div>
                   <h3 className="text-base font-semibold text-zinc-100">{title}</h3>
                 </div>
-                <p className="mt-3 text-sm leading-6 text-zinc-400">{description}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <div className="h-12 md:h-20" />
-
-        <section className="mt-12 rounded-[2rem] border border-zinc-800 bg-zinc-900/55 p-5 sm:p-6 md:p-7">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-xs tracking-[0.26em] text-zinc-500 uppercase">Signup Example</p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-100">
-                Example setup for <span className="font-mono text-cyan-300">/pranav</span>
-              </h2>
-            </div>
-            <p className="max-w-2xl text-sm leading-6 text-zinc-400">
-              This is the kind of setup a real user might create while filling the signup form.
-            </p>
-          </div>
-
-          <div className="mt-8 grid gap-4 lg:grid-cols-2">
-            {formExample.map(({ label, value, description }) => (
-              <article key={label} className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
-                <p className="text-xs tracking-[0.2em] text-zinc-500 uppercase">{label}</p>
-                <p className="mt-3 break-all rounded-xl border border-zinc-800 bg-black/30 px-3 py-2 font-mono text-sm text-zinc-100">
-                  {value}
-                </p>
                 <p className="mt-3 text-sm leading-6 text-zinc-400">{description}</p>
               </article>
             ))}
@@ -404,6 +377,34 @@ export default function HomePage() {
                   <p className="text-sm leading-6 text-zinc-300">{item}</p>
                 </div>
               </div>
+            ))}
+          </div>
+        </section>
+
+        <div className="h-12 md:h-20" />
+
+        <section className="mt-12 rounded-[2rem] border border-zinc-800 bg-zinc-900/55 p-5 sm:p-6 md:p-7">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-xs tracking-[0.26em] text-zinc-500 uppercase">Signup Example</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-100">
+                Example setup for <span className="font-mono text-cyan-300">/pranav</span>
+              </h2>
+            </div>
+            <p className="max-w-2xl text-sm leading-6 text-zinc-400">
+              This is the kind of setup a real user might create while filling the signup form.
+            </p>
+          </div>
+
+          <div className="mt-8 grid gap-4 lg:grid-cols-2">
+            {formExample.map(({ label, value, description }) => (
+              <article key={label} className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
+                <p className="text-xs tracking-[0.2em] text-zinc-500 uppercase">{label}</p>
+                <p className="mt-3 break-all rounded-xl border border-zinc-800 bg-black/30 px-3 py-2 font-mono text-sm text-zinc-100">
+                  {value}
+                </p>
+                <p className="mt-3 text-sm leading-6 text-zinc-400">{description}</p>
+              </article>
             ))}
           </div>
         </section>
