@@ -6,6 +6,8 @@ import {
   Clock3,
   Database,
   Folders,
+  Github,
+  Instagram,
   KeyRound,
   MailCheck,
   NotebookPen,
@@ -408,6 +410,30 @@ export default function HomePage() {
             ))}
           </div>
         </section>
+
+        <div className="mt-10 flex flex-col items-center justify-center gap-3 text-center">
+          <div className="flex items-center gap-4 text-zinc-400">
+            <Link
+              href="https://github.com/Pranav1632"
+              target="_blank"
+              rel="noreferrer"
+              className="transition hover:text-zinc-100"
+              aria-label="Pranav GitHub"
+            >
+              <Github className="h-5 w-5" />
+            </Link>
+            <Link
+              href="https://www.instagram.com/pranav_1632_"
+              target="_blank"
+              rel="noreferrer"
+              className="transition hover:text-zinc-100"
+              aria-label="Pranav Instagram"
+            >
+              <Instagram className="h-5 w-5" />
+            </Link>
+          </div>
+          <p className="text-sm text-zinc-500">Made with love, late-night bugs, and coder stubbornness.</p>
+        </div>
 
         <div className="h-20 md:h-32" />
       </div>
