@@ -3,7 +3,11 @@ import { connectToDatabase } from "@/lib/db";
 import { logServerError } from "@/lib/error-utils";
 import { getClientIp, successResponse } from "@/lib/http";
 import { sendRecoveryAlgoEmail } from "@/lib/mailer";
-import { checkRecoveryRateLimit } from "@/lib/redis";
+import {
+  checkRecoveryRateLimit,
+  getRecoverySendCooldownSeconds,
+  markRecoverySent,
+} from "@/lib/redis";
 import { recoveryRequestSchema } from "@/lib/validators";
 import { UserModel } from "@/models/User";
 
@@ -46,13 +50,28 @@ export async function POST(request: NextRequest) {
       return genericRecoveryResponse();
     }
 
+    const cooldownSeconds = await getRecoverySendCooldownSeconds(user.slug);
+    if (cooldownSeconds > 0) {
+      return successResponse({
+        message: `Recovery email already sent. Try again in ${Math.ceil(cooldownSeconds / 60)} minute${cooldownSeconds > 60 ? "s" : ""}.`,
+        cooldownSeconds,
+        sent: true,
+      });
+    }
+
     await sendRecoveryAlgoEmail({
       to: user.recoveryEmail,
       slug: user.slug,
       algo: user.algo,
     });
 
-    return genericRecoveryResponse();
+    await markRecoverySent(user.slug);
+
+    return successResponse({
+      message: "Recovery email sent to the address registered for this slug.",
+      cooldownSeconds: 300,
+      sent: true,
+    });
   } catch (error: unknown) {
     logServerError("api/auth/recovery", error, {
       requestBodyType: typeof body,

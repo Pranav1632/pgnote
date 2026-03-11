@@ -26,6 +26,21 @@ export function ChallengeLoginForm({ slug }: ChallengeLoginFormProps) {
   const [showRecoveryPanel, setShowRecoveryPanel] = useState(false);
   const [recoveryStatus, setRecoveryStatus] = useState<string | null>(null);
   const [isSendingRecovery, setIsSendingRecovery] = useState(false);
+  const [recoveryCooldownSeconds, setRecoveryCooldownSeconds] = useState(0);
+
+  useEffect(() => {
+    if (recoveryCooldownSeconds <= 0) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setRecoveryCooldownSeconds((current) => Math.max(0, current - 1));
+    }, 1000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [recoveryCooldownSeconds]);
 
   const fetchChallenge = useCallback(async () => {
     try {
@@ -170,7 +185,7 @@ export function ChallengeLoginForm({ slug }: ChallengeLoginFormProps) {
 
       const payload = (await response.json()) as {
         success?: boolean;
-        data?: { message?: string };
+        data?: { message?: string; cooldownSeconds?: number; sent?: boolean };
         message?: string;
       };
 
@@ -180,6 +195,7 @@ export function ChallengeLoginForm({ slug }: ChallengeLoginFormProps) {
         "If a recovery email is registered for this slug, we will email your algorithm recovery instructions.";
 
       setRecoveryStatus(message);
+      setRecoveryCooldownSeconds(Math.max(0, payload.data?.cooldownSeconds ?? 0));
     } catch {
       setRecoveryStatus(
         "If a recovery email is registered for this slug, we will email your algorithm recovery instructions."
@@ -188,6 +204,13 @@ export function ChallengeLoginForm({ slug }: ChallengeLoginFormProps) {
       setIsSendingRecovery(false);
     }
   };
+
+  const isRecoverySent = recoveryCooldownSeconds > 0;
+  const recoveryButtonLabel = isSendingRecovery
+    ? "Sending..."
+    : isRecoverySent
+      ? "Sent"
+      : "Send Recovery Email";
 
   return (
     <form onSubmit={handleVerify} className="space-y-6">
@@ -247,14 +270,20 @@ export function ChallengeLoginForm({ slug }: ChallengeLoginFormProps) {
             type="button"
             size="sm"
             className="w-full"
-            disabled={isSendingRecovery}
+            disabled={isSendingRecovery || isRecoverySent}
             onClick={() => {
               void handleRecoverySubmit();
             }}
           >
-            {isSendingRecovery ? "Sending..." : "Send Recovery Email"}
+            {recoveryButtonLabel}
           </Button>
           {recoveryStatus && <p className="text-sm text-zinc-400">{recoveryStatus}</p>}
+          {isRecoverySent && (
+            <p className="text-xs text-zinc-500">
+              You can request another recovery email in about {Math.ceil(recoveryCooldownSeconds / 60)} minute
+              {recoveryCooldownSeconds > 60 ? "s" : ""}.
+            </p>
+          )}
         </div>
       )}
 

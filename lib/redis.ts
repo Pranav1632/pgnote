@@ -8,7 +8,9 @@ import { normalizeSlug } from "@/lib/auth";
 const CHALLENGE_KEY_PREFIX = "pgnote:challenge:";
 const LOGIN_RATE_LIMIT_PREFIX = "pgnote:ratelimit:login";
 const RECOVERY_RATE_LIMIT_PREFIX = "pgnote:ratelimit:recovery";
+const RECOVERY_SENT_PREFIX = "pgnote:recovery:sent:";
 const CHALLENGE_TTL_SECONDS = 120;
+const RECOVERY_SENT_TTL_SECONDS = 300;
 
 export interface ChallengeRecord {
   slug: string;
@@ -63,6 +65,21 @@ export async function checkLoginRateLimit(ipAddress: string, slug: string) {
 
 export async function checkRecoveryRateLimit(ipAddress: string) {
   return recoveryRateLimit.limit(ipAddress);
+}
+
+function recoverySentKey(slug: string): string {
+  return `${RECOVERY_SENT_PREFIX}${normalizeSlug(slug)}`;
+}
+
+export async function getRecoverySendCooldownSeconds(slug: string): Promise<number> {
+  const ttl = await redis.ttl(recoverySentKey(slug));
+  return ttl > 0 ? ttl : 0;
+}
+
+export async function markRecoverySent(slug: string): Promise<void> {
+  await redis.set(recoverySentKey(slug), "1", {
+    ex: RECOVERY_SENT_TTL_SECONDS,
+  });
 }
 
 export function challengeKey(challengeId: string): string {
