@@ -28,7 +28,7 @@ const CUSTOM_MONGO_URI_SCHEMA = z
     "MongoDB URI must include a database name."
   );
 const INPUT_CLASS =
-  "w-full rounded-2xl border border-zinc-700 bg-zinc-950/90 px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-500 focus:ring-4 focus:ring-zinc-500/15";
+  "w-full rounded-2xl border border-zinc-700 bg-zinc-950/90 px-4 py-3 text-base text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-zinc-500 focus:ring-4 focus:ring-zinc-500/15 sm:text-sm";
 const BUTTON_CLASS =
   "rounded-2xl border border-zinc-700 bg-zinc-100 text-zinc-950 transition hover:bg-zinc-200 disabled:opacity-60";
 const CUSTOM_MONGO_DEFAULT_MESSAGE =
@@ -683,7 +683,7 @@ export function SignupForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-8">
-      <section className="rounded-[1.75rem] border border-zinc-800 bg-zinc-950/90 p-5 md:p-6">
+      <section className="rounded-[1.75rem] border border-zinc-800 bg-zinc-950/90 p-4 sm:p-5 md:p-6">
         <p className="inline-flex rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-[11px] tracking-[0.22em] text-zinc-300 uppercase">
           Step 1
         </p>
@@ -701,7 +701,7 @@ export function SignupForm() {
                 {...form.register("slug")}
                 placeholder="rahul"
                 autoComplete="off"
-                className="w-full bg-transparent px-1 py-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
+                className="w-full bg-transparent px-3 py-3 text-base text-zinc-100 outline-none placeholder:text-zinc-500 sm:text-sm"
               />
             </div>
             {form.formState.errors.slug && (
@@ -815,7 +815,7 @@ export function SignupForm() {
         </div>
       </section>
 
-      <section className="rounded-[1.75rem] border border-zinc-800 bg-zinc-950/90 p-5 md:p-6">
+      <section className="rounded-[1.75rem] border border-zinc-800 bg-zinc-950/90 p-4 sm:p-5 md:p-6">
         <p className="inline-flex rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-[11px] tracking-[0.22em] text-zinc-300 uppercase">
           Step 2
         </p>
@@ -845,7 +845,7 @@ export function SignupForm() {
         {algoError && <p className="mt-2 text-sm text-rose-400">{algoError}</p>}
       </section>
 
-      <section className="rounded-[1.75rem] border border-zinc-800 bg-zinc-950/90 p-5 md:p-6">
+      <section className="rounded-[1.75rem] border border-zinc-800 bg-zinc-950/90 p-4 sm:p-5 md:p-6">
         <p className="inline-flex rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-[11px] tracking-[0.22em] text-zinc-300 uppercase">
           Step 3
         </p>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type DragEvent } from "react";
+import { Minus, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,8 +13,6 @@ import {
 } from "@/lib/passkey";
 
 const SAMPLE_CHARS = "A1b2C3d4E5f6G7h8I9j0KLMNOPQRST";
-const INPUT_CLASS =
-  "w-full rounded-md border border-[#333] bg-black px-3 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-[#0070f3] focus:ring-2 focus:ring-[#0070f3]/30";
 const BUTTON_CLASS =
   "rounded-md border border-[#333] bg-black text-white transition hover:bg-[#111] disabled:opacity-50";
 
@@ -25,6 +24,15 @@ interface AlgoBuilderProps {
   onChunksChange: (nextChunks: ChunkConfig[]) => void;
   onOrderChange: (nextOrder: number[]) => void;
   onRandomAlgoChange: (next: { keyLength: number; chunks: ChunkConfig[]; order: number[] }) => void;
+}
+
+interface NumberStepperProps {
+  value: number;
+  min: number;
+  max: number;
+  onChange: (nextValue: number) => void;
+  label: string;
+  className?: string;
 }
 
 function reorder<T>(items: T[], fromIndex: number, toIndex: number): T[] {
@@ -55,6 +63,65 @@ function shuffle<T>(items: T[]): T[] {
     next[swapIndex] = current as T;
   }
   return next;
+}
+
+function NumberStepper({
+  value,
+  min,
+  max,
+  onChange,
+  label,
+  className,
+}: NumberStepperProps) {
+  const clampedValue = Math.min(max, Math.max(min, value));
+
+  const updateValue = (nextValue: number) => {
+    onChange(Math.min(max, Math.max(min, nextValue)));
+  };
+
+  return (
+    <div className={className}>
+      <span className="mb-2 block text-xs font-medium tracking-wide text-zinc-400 uppercase">
+        {label}
+      </span>
+      <div className="grid grid-cols-[56px_minmax(0,1fr)_56px] items-stretch rounded-2xl border border-[#333] bg-black/80 shadow-[0_8px_24px_rgba(0,0,0,0.25)]">
+        <button
+          type="button"
+          aria-label={`Decrease ${label}`}
+          onClick={() => updateValue(clampedValue - 1)}
+          disabled={clampedValue <= min}
+          className="flex min-h-14 items-center justify-center rounded-l-2xl border-r border-[#333] text-zinc-200 transition hover:bg-[#111] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Minus className="size-4" />
+        </button>
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={clampedValue}
+          aria-label={label}
+          onChange={(event) => {
+            const digitsOnly = event.target.value.replace(/\D/g, "");
+            if (!digitsOnly) {
+              onChange(min);
+              return;
+            }
+            updateValue(Number(digitsOnly));
+          }}
+          className="min-w-0 bg-transparent px-2 text-center text-lg font-semibold text-zinc-100 outline-none"
+        />
+        <button
+          type="button"
+          aria-label={`Increase ${label}`}
+          onClick={() => updateValue(clampedValue + 1)}
+          disabled={clampedValue >= max}
+          className="flex min-h-14 items-center justify-center rounded-r-2xl border-l border-[#333] text-zinc-200 transition hover:bg-[#111] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Plus className="size-4" />
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function createRandomChunks(keyLength: number): ChunkConfig[] {
@@ -196,12 +263,12 @@ export function AlgoBuilder({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div className="w-full md:max-w-xs">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="w-full md:max-w-sm">
           <label className="mb-2 block text-sm font-medium text-zinc-200">
             Key Length ({MIN_KEY_LENGTH}-{MAX_KEY_LENGTH})
           </label>
-          <div className="flex items-center gap-3">
+          <div className="space-y-3">
             <input
               type="range"
               min={MIN_KEY_LENGTH}
@@ -214,19 +281,16 @@ export function AlgoBuilder({
               }}
               className="w-full accent-[#0070f3]"
             />
-            <input
-              type="number"
+            <NumberStepper
+              value={keyLength}
               min={MIN_KEY_LENGTH}
               max={MAX_KEY_LENGTH}
-              value={keyLength}
-              onChange={(event) => {
-                const next = Number(event.target.value);
-                if (Number.isNaN(next)) {
-                  return;
-                }
-                onKeyLengthChange(Math.min(MAX_KEY_LENGTH, Math.max(MIN_KEY_LENGTH, next)));
+              label="Length"
+              className="w-full"
+              onChange={(next) => {
+                onKeyLengthChange(next);
+                setDraftTo(Math.max(0, next - 1));
               }}
-              className={`${INPUT_CLASS} w-20`}
             />
           </div>
         </div>
@@ -247,46 +311,36 @@ export function AlgoBuilder({
           </h3>
 
           <div className="space-y-3 rounded-md border border-[#333] bg-[#0b0b0b] p-3">
-            <div className="grid grid-cols-2 gap-2">
-            <input
-              type="number"
-              min={1}
-              max={keyLength}
-              value={draftFrom + 1}
-              onChange={(event) => {
-                const next = Number(event.target.value);
-                if (Number.isNaN(next)) {
-                  return;
-                }
-                setDraftFrom(clampIndex(next - 1, keyLength));
-              }}
-              placeholder="from"
-              className={INPUT_CLASS}
-            />
-            <input
-              type="number"
-              min={1}
-              max={keyLength}
-              value={draftTo + 1}
-              onChange={(event) => {
-                const next = Number(event.target.value);
-                if (Number.isNaN(next)) {
-                  return;
-                }
-                setDraftTo(clampIndex(next - 1, keyLength));
-              }}
-              placeholder="to"
-              className={INPUT_CLASS}
-            />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <NumberStepper
+                value={draftFrom + 1}
+                min={1}
+                max={keyLength}
+                label="From"
+                onChange={(next) => {
+                  setDraftFrom(clampIndex(next - 1, keyLength));
+                }}
+                className="w-full"
+              />
+              <NumberStepper
+                value={draftTo + 1}
+                min={1}
+                max={keyLength}
+                label="To"
+                onChange={(next) => {
+                  setDraftTo(clampIndex(next - 1, keyLength));
+                }}
+                className="w-full"
+              />
             </div>
-            <label className="flex items-center gap-2 text-sm text-zinc-300">
+            <label className="flex min-h-11 items-center gap-2 text-sm text-zinc-300">
               <input
                 type="checkbox"
                 checked={draftReverse}
                 onChange={(event) => setDraftReverse(event.target.checked)}
                 className="h-4 w-4 accent-[#0070f3]"
               />
-              Reverse chunk
+              Reverse chunk 
             </label>
             <Button type="button" className={`${BUTTON_CLASS} w-full`} onClick={addChunk}>
               Add Chunk
@@ -300,47 +354,39 @@ export function AlgoBuilder({
             {chunks.map((chunk, index) => (
               <div
                 key={`${index}-${chunk.from}-${chunk.to}`}
-                className="space-y-2 rounded-md border border-[#333] bg-[#0b0b0b] p-3"
+                className="space-y-3 rounded-md border border-[#333] bg-[#0b0b0b] p-3"
               >
                 <div className="text-xs tracking-wide text-zinc-400 uppercase">Chunk {index + 1}</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="number"
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <NumberStepper
+                    value={chunk.from + 1}
                     min={1}
                     max={keyLength}
-                    value={chunk.from + 1}
-                    onChange={(event) => {
-                      const next = Number(event.target.value);
-                      if (Number.isNaN(next)) {
-                        return;
-                      }
+                    label="From"
+                    onChange={(next) => {
                       updateChunk(index, {
                         ...chunk,
                         from: clampIndex(next - 1, keyLength),
                       });
                     }}
-                    className={INPUT_CLASS}
+                    className="w-full"
                   />
-                  <input
-                    type="number"
+                  <NumberStepper
+                    value={chunk.to + 1}
                     min={1}
                     max={keyLength}
-                    value={chunk.to + 1}
-                    onChange={(event) => {
-                      const next = Number(event.target.value);
-                      if (Number.isNaN(next)) {
-                        return;
-                      }
+                    label="To"
+                    onChange={(next) => {
                       updateChunk(index, {
                         ...chunk,
                         to: clampIndex(next - 1, keyLength),
                       });
                     }}
-                    className={INPUT_CLASS}
+                    className="w-full"
                   />
                 </div>
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 text-sm text-zinc-300">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <label className="flex min-h-11 items-center gap-2 text-sm text-zinc-300">
                     <input
                       type="checkbox"
                       checked={chunk.reverse}
@@ -357,7 +403,7 @@ export function AlgoBuilder({
                   <Button
                     type="button"
                     size="xs"
-                    className={BUTTON_CLASS}
+                    className={`${BUTTON_CLASS} w-full sm:w-auto`}
                     onClick={() => removeChunk(index)}
                   >
                     Remove
@@ -384,15 +430,15 @@ export function AlgoBuilder({
                   onDrop={() => handleOrderDrop(orderIndex)}
                   className="cursor-move rounded-md border border-[#333] bg-[#0b0b0b] p-3 text-sm text-zinc-200"
                 >
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <span>
                       Slot {orderIndex + 1} -&gt; Chunk {chunkIndex + 1}
                     </span>
-                    <div className="flex gap-1">
+                    <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-1">
                       <Button
                         type="button"
                         size="xs"
-                        className={BUTTON_CLASS}
+                        className={`${BUTTON_CLASS} w-full sm:w-auto`}
                         disabled={orderIndex === 0}
                         onClick={() => onOrderChange(reorder(order, orderIndex, orderIndex - 1))}
                       >
@@ -401,7 +447,7 @@ export function AlgoBuilder({
                       <Button
                         type="button"
                         size="xs"
-                        className={BUTTON_CLASS}
+                        className={`${BUTTON_CLASS} w-full sm:w-auto`}
                         disabled={orderIndex === order.length - 1}
                         onClick={() => onOrderChange(reorder(order, orderIndex, orderIndex + 1))}
                       >
@@ -446,9 +492,14 @@ export function AlgoBuilder({
           </div>
 
           <div className="space-y-2 rounded-md border border-[#333] bg-[#0b0b0b] p-3 font-mono text-sm">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs tracking-wide text-zinc-400 uppercase">Live Preview</p>
-              <Button type="button" size="xs" className={BUTTON_CLASS} onClick={copyPreviewChallenge}>
+              <Button
+                type="button"
+                size="xs"
+                className={`${BUTTON_CLASS} w-full sm:w-auto`}
+                onClick={copyPreviewChallenge}
+              >
                 Copy Challenge
               </Button>
             </div>
