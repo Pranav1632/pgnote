@@ -3,11 +3,16 @@
 import debounce from "debounce";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { BashTextArea } from "@/components/notes/bash-text-area";
 import { FolderSidebar } from "@/components/notes/folder-sidebar";
+import { NoteListPanel } from "@/components/notes/note-list-panel";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable-panel";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -67,19 +72,14 @@ function getFailureMessage<T>(payload: ApiResult<T>, fallback: string): string {
 }
 
 function parseTimestamp(isoValue: string | undefined): number | null {
-  if (!isoValue) {
-    return null;
-  }
-
+  if (!isoValue) return null;
   const timestamp = new Date(isoValue).getTime();
   return Number.isFinite(timestamp) ? timestamp : null;
 }
 
 function notePreviewText(content: string, maxLength = 60): string {
   const normalized = content.replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
+  if (normalized.length <= maxLength) return normalized;
   return `${normalized.slice(0, maxLength)}...`;
 }
 
@@ -106,7 +106,6 @@ export function NotesDashboard({
   const [pendingDeleteNote, setPendingDeleteNote] = useState<NoteDTO | null>(null);
   const [isDeletingNote, setIsDeletingNote] = useState(false);
   const [deletingNoteIds, setDeletingNoteIds] = useState<Set<string>>(() => new Set());
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const sessionEndsAt = useMemo(
     () => initialLoginAt + timeoutMinutes * 60_000,
@@ -122,23 +121,16 @@ export function NotesDashboard({
 
   const logoutAndRedirect = useCallback(
     async (reason?: "timeout" | "manual") => {
-      if (isLoggingOutRef.current) {
-        return;
-      }
-
+      if (isLoggingOutRef.current) return;
       isLoggingOutRef.current = true;
       toast.dismiss("session-timeout-warning");
-
       try {
         await fetch("/api/auth/logout", { method: "POST" });
-      } catch {
-      }
-
+      } catch { }
       if (reason) {
         router.push(`/${slug}?reason=${reason}`);
         return;
       }
-
       router.push(`/${slug}`);
     },
     [router, slug]
@@ -148,38 +140,34 @@ export function NotesDashboard({
     void logoutAndRedirect("timeout");
   }, [logoutAndRedirect]);
 
+  // Session timer
   useEffect(() => {
     const interval = setInterval(() => {
       setRemainingMs(sessionEndsAt - Date.now());
     }, 1000);
-
     return () => clearInterval(interval);
   }, [sessionEndsAt]);
 
+  // Auto-save countdown
   useEffect(() => {
     if (autoSaveDueAt === null) {
       setAutoSaveRemainingMs(0);
       return;
     }
-
     setAutoSaveRemainingMs(Math.max(0, autoSaveDueAt - Date.now()));
     const interval = setInterval(() => {
       setAutoSaveRemainingMs(Math.max(0, autoSaveDueAt - Date.now()));
     }, 250);
-
     return () => clearInterval(interval);
   }, [autoSaveDueAt]);
 
+  // Session expiry warnings
   useEffect(() => {
-    if (isLoggingOutRef.current) {
-      return;
-    }
-
+    if (isLoggingOutRef.current) return;
     if (remainingMs <= 0) {
       void logoutAndRedirect("timeout");
       return;
     }
-
     if (remainingMs <= 30_000) {
       if (!warningShownRef.current) {
         warningShownRef.current = true;
@@ -195,28 +183,21 @@ export function NotesDashboard({
     }
   }, [remainingMs, logoutAndRedirect]);
 
+  // ── Data fetching ──────────────────────────────────────────────
   const fetchFolders = useCallback(async () => {
     setIsLoadingFolders(true);
     setDashboardError(null);
-
     try {
       const response = await fetch("/api/folders", { method: "GET" });
-      if (response.status === 401) {
-        handleUnauthorized();
-        return;
-      }
-
+      if (response.status === 401) { handleUnauthorized(); return; }
       const payload = await parseApiResponse<{ folders: FolderDTO[] }>(response);
       if (!response.ok || !payload.success) {
         setDashboardError(getFailureMessage(payload, "Unable to load folders."));
         return;
       }
-
       setFolders(payload.data.folders);
-      setActiveFolderId((previous) => {
-        if (previous && payload.data.folders.some((folder) => folder.id === previous)) {
-          return previous;
-        }
+      setActiveFolderId((prev) => {
+        if (prev && payload.data.folders.some((f) => f.id === prev)) return prev;
         return payload.data.folders[0]?.id ?? null;
       });
     } catch {
@@ -229,26 +210,16 @@ export function NotesDashboard({
   const fetchNotes = useCallback(async (folderId: string) => {
     setIsLoadingNotes(true);
     setDashboardError(null);
-
     try {
-      const response = await fetch(`/api/notes?folderId=${encodeURIComponent(folderId)}`, {
-        method: "GET",
-      });
-
-      if (response.status === 401) {
-        handleUnauthorized();
-        return;
-      }
-
+      const response = await fetch(`/api/notes?folderId=${encodeURIComponent(folderId)}`, { method: "GET" });
+      if (response.status === 401) { handleUnauthorized(); return; }
       const payload = await parseApiResponse<{ notes: NoteDTO[] }>(response);
       if (!response.ok || !payload.success) {
         setDashboardError(getFailureMessage(payload, "Unable to load notes."));
         return;
       }
-
       const nextNotes = payload.data.notes;
       setNotes(nextNotes);
-
       const firstNote = nextNotes[0];
       setActiveNoteId(firstNote?.id ?? null);
       setEditorContent(firstNote?.content ?? "");
@@ -289,15 +260,12 @@ export function NotesDashboard({
       setAutoSaveRemainingMs(0);
       return;
     }
-
     void fetchNotes(activeFolderId);
   }, [activeFolderId, fetchNotes]);
 
+  // ── Save logic ─────────────────────────────────────────────────
   const saveContent = useCallback(async (contentToSave: string, reason: "manual" | "autosave") => {
-    if (!activeFolderId) {
-      return;
-    }
-
+    if (!activeFolderId) return;
     const creatingNewNote = !activeNoteId;
     if (creatingNewNote && contentToSave.trim().length === 0) {
       setSaveState("saved");
@@ -305,18 +273,13 @@ export function NotesDashboard({
       setAutoSaveRemainingMs(0);
       return;
     }
-
-    if (saveInFlightRef.current) {
-      return;
-    }
-
+    if (saveInFlightRef.current) return;
     if (contentToSave === lastSavedContentRef.current) {
       setSaveState("saved");
       setAutoSaveDueAt(null);
       setAutoSaveRemainingMs(0);
       return;
     }
-
     saveInFlightRef.current = true;
     setIsSaving(true);
     setSaveState("saving");
@@ -324,67 +287,42 @@ export function NotesDashboard({
     setDashboardError(null);
     setAutoSaveDueAt(null);
     setAutoSaveRemainingMs(0);
-
     try {
       if (creatingNewNote) {
         const createResponse = await fetch("/api/notes", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            folderId: activeFolderId,
-            content: contentToSave,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ folderId: activeFolderId, content: contentToSave }),
         });
-
-        if (createResponse.status === 401) {
-          handleUnauthorized();
-          return;
-        }
-
+        if (createResponse.status === 401) { handleUnauthorized(); return; }
         const createPayload = await parseApiResponse<{ note: NoteDTO }>(createResponse);
         if (!createResponse.ok || !createPayload.success) {
           setSaveState("unsaved");
           setDashboardError(getFailureMessage(createPayload, "Unable to save note."));
           return;
         }
-
         const createdNote = createPayload.data.note;
         setActiveNoteId(createdNote.id);
-        setNotes((previous) => [createdNote, ...previous]);
+        setNotes((prev) => [createdNote, ...prev]);
       } else {
         const updateResponse = await fetch("/api/notes", {
           method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            noteId: activeNoteId,
-            folderId: activeFolderId,
-            content: contentToSave,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ noteId: activeNoteId, folderId: activeFolderId, content: contentToSave }),
         });
-
-        if (updateResponse.status === 401) {
-          handleUnauthorized();
-          return;
-        }
-
+        if (updateResponse.status === 401) { handleUnauthorized(); return; }
         const updatePayload = await parseApiResponse<{ note: NoteDTO }>(updateResponse);
         if (!updateResponse.ok || !updatePayload.success) {
           setSaveState("unsaved");
           setDashboardError(getFailureMessage(updatePayload, "Unable to save note."));
           return;
         }
-
         const updatedNote = updatePayload.data.note;
-        setNotes((previous) => {
-          const withoutCurrent = previous.filter((note) => note.id !== updatedNote.id);
+        setNotes((prev) => {
+          const withoutCurrent = prev.filter((n) => n.id !== updatedNote.id);
           return [updatedNote, ...withoutCurrent];
         });
       }
-
       lastSavedContentRef.current = contentToSave;
       setSaveState("saved");
       setLastSavedAt(Date.now());
@@ -407,20 +345,15 @@ export function NotesDashboard({
   );
 
   useEffect(() => {
-    return () => {
-      debouncedSave.clear();
-    };
+    return () => { debouncedSave.clear(); };
   }, [debouncedSave]);
 
+  // ── Handlers ───────────────────────────────────────────────────
   const handleEditorChange = (nextContent: string) => {
     setEditorContent(nextContent);
     setSaveMessage(null);
     setDashboardError(null);
-
-    if (!activeFolderId) {
-      return;
-    }
-
+    if (!activeFolderId) return;
     if (nextContent === lastSavedContentRef.current) {
       setSaveState("saved");
       setAutoSaveDueAt(null);
@@ -428,7 +361,6 @@ export function NotesDashboard({
       debouncedSave.clear();
       return;
     }
-
     setSaveState("unsaved");
     const dueAt = Date.now() + AUTO_SAVE_DELAY_MS;
     setAutoSaveDueAt(dueAt);
@@ -446,33 +378,19 @@ export function NotesDashboard({
     const duplicateExists = folders.some(
       (folder) => folder.name.trim().toLowerCase() === normalizedName
     );
-
-    if (duplicateExists) {
-      throw new Error("Folder already exists.");
-    }
-
+    if (duplicateExists) throw new Error("Folder already exists.");
     const response = await fetch("/api/folders", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        name,
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
     });
-
-    if (response.status === 401) {
-      handleUnauthorized();
-      throw new Error("Unauthorized.");
-    }
-
+    if (response.status === 401) { handleUnauthorized(); throw new Error("Unauthorized."); }
     const payload = await parseApiResponse<{ folder: FolderDTO }>(response);
     if (!response.ok || !payload.success) {
       const fallback = response.status === 409 ? "Folder already exists." : "Unable to create folder.";
       throw new Error(getFailureMessage(payload, fallback));
     }
-
-    setFolders((previous) => [...previous, payload.data.folder]);
+    setFolders((prev) => [...prev, payload.data.folder]);
     setActiveFolderId(payload.data.folder.id);
     setNotes([]);
     setActiveNoteId(null);
@@ -487,23 +405,11 @@ export function NotesDashboard({
 
   const handleDeleteFolder = async (folderId: string) => {
     try {
-      const response = await fetch(`/api/folders/${folderId}`, {
-        method: "DELETE",
-      });
-
-      if (response.status === 401) {
-        handleUnauthorized();
-        throw new Error("Unauthorized.");
-      }
-
-      if (!response.ok) {
-        toast.error("Failed to delete folder");
-        throw new Error("Failed to delete folder.");
-      }
-
-      setFolders((previousFolders) => {
-        const nextFolders = previousFolders.filter((folder) => folder.id !== folderId);
-
+      const response = await fetch(`/api/folders/${folderId}`, { method: "DELETE" });
+      if (response.status === 401) { handleUnauthorized(); throw new Error("Unauthorized."); }
+      if (!response.ok) { toast.error("Failed to delete folder"); throw new Error("Failed to delete folder."); }
+      setFolders((prevFolders) => {
+        const nextFolders = prevFolders.filter((f) => f.id !== folderId);
         if (activeFolderId === folderId) {
           const nextActiveFolderId = nextFolders[0]?.id ?? null;
           debouncedSave.clear();
@@ -518,52 +424,28 @@ export function NotesDashboard({
           setAutoSaveRemainingMs(0);
           setSaveMessage(null);
         }
-
         return nextFolders;
       });
     } catch (error) {
       toast.error("Failed to delete folder");
-      if (error instanceof Error) {
-        throw error;
-      }
+      if (error instanceof Error) throw error;
       throw new Error("Failed to delete folder.");
     }
   };
 
   const handleDeleteNote = async () => {
-    if (!pendingDeleteNote) {
-      return;
-    }
-
+    if (!pendingDeleteNote) return;
     setIsDeletingNote(true);
-
     try {
       const noteId = pendingDeleteNote.id;
-      const response = await fetch(`/api/notes/${noteId}`, {
-        method: "DELETE",
-      });
-
-      if (response.status === 401) {
-        handleUnauthorized();
-        return;
-      }
-
-      if (!response.ok) {
-        toast.error("Failed to delete note");
-        return;
-      }
-
-      setDeletingNoteIds((previous) => {
-        const next = new Set(previous);
-        next.add(noteId);
-        return next;
-      });
+      const response = await fetch(`/api/notes/${noteId}`, { method: "DELETE" });
+      if (response.status === 401) { handleUnauthorized(); return; }
+      if (!response.ok) { toast.error("Failed to delete note"); return; }
+      setDeletingNoteIds((prev) => { const next = new Set(prev); next.add(noteId); return next; });
       setPendingDeleteNote(null);
-
       window.setTimeout(() => {
-        setNotes((previousNotes) => {
-          const nextNotes = previousNotes.filter((note) => note.id !== noteId);
-
+        setNotes((prevNotes) => {
+          const nextNotes = prevNotes.filter((n) => n.id !== noteId);
           if (activeNoteId === noteId) {
             const nextActiveNote = nextNotes[0];
             debouncedSave.clear();
@@ -576,15 +458,9 @@ export function NotesDashboard({
             setAutoSaveRemainingMs(0);
             setSaveMessage(null);
           }
-
           return nextNotes;
         });
-
-        setDeletingNoteIds((previous) => {
-          const next = new Set(previous);
-          next.delete(noteId);
-          return next;
-        });
+        setDeletingNoteIds((prev) => { const next = new Set(prev); next.delete(noteId); return next; });
       }, 180);
     } catch {
       toast.error("Failed to delete note");
@@ -594,11 +470,8 @@ export function NotesDashboard({
   };
 
   const handleOpenNote = (noteId: string) => {
-    const selected = notes.find((note) => note.id === noteId);
-    if (!selected) {
-      return;
-    }
-
+    const selected = notes.find((n) => n.id === noteId);
+    if (!selected) return;
     debouncedSave.clear();
     setActiveNoteId(selected.id);
     setEditorContent(selected.content);
@@ -626,21 +499,37 @@ export function NotesDashboard({
     await logoutAndRedirect("manual");
   };
 
+  // Keyboard shortcuts: Ctrl+N (new note)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "n") {
+        e.preventDefault();
+        handleCreateNewNote();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const autosaveSeconds =
     saveState === "unsaved" && autoSaveDueAt !== null
       ? Math.max(1, Math.ceil(autoSaveRemainingMs / 1000))
       : null;
 
+  const activeFolder = folders.find((f) => f.id === activeFolderId);
+
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-100">
-      <div className="mx-auto max-w-7xl px-3 py-4 sm:px-4 md:px-6">
-        <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+    <main className="h-screen bg-zinc-950 text-zinc-100">
+      <div className="flex h-full flex-col px-3 py-3 sm:px-4 md:px-5">
+        {/* Top bar */}
+        <div className="mb-3 flex shrink-0 flex-col gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs tracking-[0.28em] text-zinc-500 uppercase">pgnote workspace</p>
             <p className="text-sm text-zinc-300">/{slug}/notes</p>
           </div>
           <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-end">
-            <div className="rounded-lg border border-zinc-800 bg-black/40 px-3 py-2 font-mono text-sm text-emerald-400">
+            <div className="rounded-lg border border-zinc-800 bg-black/40 px-3 py-1.5 font-mono text-sm text-emerald-400">
               {formatDuration(remainingMs)}
             </div>
             <Button type="button" variant="destructive" size="sm" onClick={handleEndSession}>
@@ -649,102 +538,83 @@ export function NotesDashboard({
           </div>
         </div>
 
-        <div className={`grid gap-4 ${isSidebarCollapsed ? "lg:grid-cols-[88px_1fr]" : "lg:grid-cols-[280px_1fr]"}`}>
-          <div className="h-auto lg:h-[calc(100vh-7.5rem)]">
-            <FolderSidebar
-              folders={folders}
-              activeFolderId={activeFolderId}
-              isCollapsed={isSidebarCollapsed}
-              onToggleCollapse={() => setIsSidebarCollapsed((previous) => !previous)}
-              onSelectFolder={setActiveFolderId}
-              onCreateFolder={handleCreateFolder}
-              onDeleteFolder={handleDeleteFolder}
-            />
-          </div>
-
-          <section className="min-w-0 space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-zinc-100">Notes</h2>
-                <p className="text-sm text-zinc-400">
-                  {activeFolderId
-                    ? `Active folder: ${folders.find((folder) => folder.id === activeFolderId)?.name ?? "--"}`
-                    : "Select or create a folder to begin"}
-                </p>
-              </div>
-              <Button type="button" size="sm" variant="outline" onClick={handleCreateNewNote}>
-                New Note
-              </Button>
-            </div>
-
-            <BashTextArea
-              value={editorContent}
-              onChange={handleEditorChange}
-              onSave={handleManualSave}
-              isSaving={isSaving}
-              saveState={saveState}
-              autosaveSeconds={autosaveSeconds}
-              lastSavedAt={lastSavedAt}
-              disabled={!activeFolderId || isLoadingFolders || isLoadingNotes}
-            />
-
+        {/* Messages */}
+        {(saveMessage || dashboardError) && (
+          <div className="mb-2 shrink-0">
             {saveMessage && <p className="text-sm text-emerald-400">{saveMessage}</p>}
             {dashboardError && <p className="text-sm text-rose-400">{dashboardError}</p>}
+          </div>
+        )}
 
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4">
-              <h3 className="mb-3 text-sm font-semibold tracking-wide text-zinc-200 uppercase">
-                Saved Notes (Newest First)
-              </h3>
+        {/* 3-panel resizable layout */}
+        <div className="min-h-0 flex-1">
+          <ResizablePanelGroup direction="horizontal" className="h-full rounded-xl">
+            {/* Left: Folder sidebar */}
+            <ResizablePanel defaultSize="18%" minSize="8%" maxSize="30%" id="sidebar">
+              <FolderSidebar
+                folders={folders}
+                activeFolderId={activeFolderId}
+                isCollapsed={false}
+                onToggleCollapse={() => { }}
+                onSelectFolder={setActiveFolderId}
+                onCreateFolder={handleCreateFolder}
+                onDeleteFolder={handleDeleteFolder}
+              />
+            </ResizablePanel>
 
-              {!activeFolderId && <p className="text-sm text-zinc-400">Pick a folder to view notes.</p>}
-              {activeFolderId && notes.length === 0 && (
-                <p className="text-sm text-zinc-400">No notes saved yet in this folder.</p>
-              )}
+            <ResizableHandle withHandle />
 
-              <div className="space-y-2">
-                {notes.map((note) => (
-                  <div
-                    key={note.id}
-                    className={`group relative rounded-xl border px-3 py-3 text-left transition-all duration-200 ${
-                      activeNoteId === note.id
-                        ? "border-zinc-400 bg-zinc-800 text-zinc-100"
-                        : "border-zinc-800 bg-zinc-900/40 text-zinc-300 hover:border-zinc-700 hover:text-zinc-100"
-                    } ${deletingNoteIds.has(note.id) ? "pointer-events-none opacity-0" : "opacity-100"}`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => handleOpenNote(note.id)}
-                      className="w-full pr-9 text-left"
-                    >
-                      <div className="mb-1 text-xs text-zinc-500">
-                        {new Date(note.updatedAt).toLocaleString()}
-                      </div>
-                      <div className="line-clamp-3 font-mono text-sm">
-                        {note.content.length > 240 ? `${note.content.slice(0, 240)}...` : note.content}
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Delete note"
-                      onClick={() => setPendingDeleteNote(note)}
-                    className="absolute top-3 right-3 rounded-md border border-transparent p-1 text-zinc-500 opacity-100 transition hover:border-zinc-700 hover:text-rose-300 md:opacity-0 md:group-hover:opacity-100"
-                  >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+            {/* Center: Note editor */}
+            <ResizablePanel defaultSize="55%" minSize="30%" id="editor">
+              <div className="flex h-full flex-col gap-2 px-1">
+                <div className="flex shrink-0 items-center justify-between">
+                  <div>
+                    <h2 className="text-sm font-semibold text-zinc-100">
+                      {activeFolder?.name ?? "Notes"}
+                    </h2>
+                    {!activeFolderId && (
+                      <p className="text-xs text-zinc-500">Select or create a folder</p>
+                    )}
                   </div>
-                ))}
+                </div>
+                <div className="min-h-0 flex-1">
+                  <BashTextArea
+                    value={editorContent}
+                    onChange={handleEditorChange}
+                    onSave={handleManualSave}
+                    isSaving={isSaving}
+                    saveState={saveState}
+                    autosaveSeconds={autosaveSeconds}
+                    lastSavedAt={lastSavedAt}
+                    disabled={!activeFolderId || isLoadingFolders || isLoadingNotes}
+                  />
+                </div>
               </div>
-            </div>
-          </section>
+            </ResizablePanel>
+
+            <ResizableHandle withHandle />
+
+            {/* Right: Note list panel */}
+            <ResizablePanel defaultSize="27%" minSize="15%" maxSize="45%" id="notes">
+              <NoteListPanel
+                notes={notes}
+                activeNoteId={activeNoteId}
+                deletingNoteIds={deletingNoteIds}
+                onOpenNote={handleOpenNote}
+                onDeleteNote={(note) => setPendingDeleteNote(note)}
+                onCreateNewNote={handleCreateNewNote}
+                activeFolderId={activeFolderId}
+              />
+            </ResizablePanel>
+          </ResizablePanelGroup>
         </div>
       </div>
 
+      {/* Delete note confirmation dialog */}
       <AlertDialog
         open={Boolean(pendingDeleteNote)}
         onOpenChange={(open) => {
-          if (!open && !isDeletingNote) {
-            setPendingDeleteNote(null);
-          }
+          if (!open && !isDeletingNote) setPendingDeleteNote(null);
         }}
       >
         <AlertDialogContent>
@@ -765,7 +635,7 @@ export function NotesDashboard({
                 void handleDeleteNote();
               }}
             >
-              {isDeletingNote ? "Deleting..." : "Delete"}
+              {isDeletingNote ? "Deleting…" : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

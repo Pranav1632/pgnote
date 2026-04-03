@@ -127,3 +127,29 @@
     @apply font-sans;
   }
 }
+
+/* Custom scrollbars for the dark theme */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 5px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(113, 113, 122, 0.3);
+  border-radius: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(113, 113, 122, 0.5);
+}
+
+/* Panel textarea should fill container */
+textarea {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(113, 113, 122, 0.3) transparent;
+}
+
+/* Smooth transitions for resizable panels */
+[data-panel-group-direction] > [data-panel] {
+  transition: flex 0s;
+}

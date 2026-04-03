@@ -88,7 +88,7 @@ export function FolderSidebar({
   };
 
   return (
-    <aside className="max-h-[42vh] overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3 backdrop-blur lg:h-full lg:max-h-none">
+    <aside className="flex h-full flex-col overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3 backdrop-blur">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         {!isCollapsed && (
           <h2 className="text-sm font-semibold tracking-wide text-zinc-200 uppercase">Folders</h2>
@@ -166,11 +166,10 @@ export function FolderSidebar({
         {folders.map((folder) => (
           <div
             key={folder.id}
-            className={`group relative rounded-xl border transition ${
-              activeFolderId === folder.id
+            className={`group relative rounded-xl border transition ${activeFolderId === folder.id
                 ? "border-zinc-400 bg-zinc-800 text-zinc-100"
                 : "border-zinc-800 bg-zinc-900/40 text-zinc-300 hover:border-zinc-700 hover:text-zinc-100"
-            }`}
+              }`}
           >
             <button
               type="button"
