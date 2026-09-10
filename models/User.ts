@@ -12,6 +12,7 @@ const { Schema } = mongoose;
 const SLUG_REGEX = /^[a-z0-9][a-z0-9_-]{2,31}$/;
 
 export interface IUser {
+  name?: string;
   slug: string;
   algo: PasskeyAlgo;
   sessionTimeout: number;
@@ -81,6 +82,12 @@ const passkeyAlgoSchema = new Schema<PasskeyAlgo>(
 
 const userSchema = new Schema<IUser>(
   {
+    name: {
+      type: String,
+      trim: true,
+      maxlength: 50,
+      default: undefined,
+    },
     slug: {
       type: String,
       required: true,

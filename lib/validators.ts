@@ -126,3 +126,29 @@ export const deleteNoteParamsSchema = z.object({
 export const deleteFolderParamsSchema = z.object({
   id: objectIdSchema,
 });
+
+export const nameSchema = z
+  .string()
+  .trim()
+  .max(50, "Name must be 50 characters or less.")
+  .optional()
+  .nullable();
+
+export const updateProfileRequestSchema = z.object({
+  name: nameSchema,
+  slug: slugSchema.optional(),
+  recoveryEmail: recoveryEmailSchema.optional(),
+  sessionTimeout: sessionTimeoutSchema.optional(),
+  customMongoUri: z
+    .union([
+      z
+        .string()
+        .trim()
+        .regex(MONGO_URI_REGEX, "Invalid MongoDB URI.")
+        .refine((value) => hasMongoDatabaseName(value), "MongoDB URI must include a database name.")
+        .max(2048),
+      z.literal(""),
+      z.null(),
+    ])
+    .optional(),
+});

@@ -3,12 +3,13 @@
 import debounce from "debounce";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, FileText, Folder, LogOut, PenLine } from "lucide-react";
+import { ChevronLeft, FileText, Folder, LogOut, PenLine, User } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { BashTextArea } from "@/components/notes/bash-text-area";
 import { FolderSidebar } from "@/components/notes/folder-sidebar";
 import { NoteListPanel } from "@/components/notes/note-list-panel";
+import { ProfileDialog } from "@/components/profile/profile-dialog";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -109,6 +110,7 @@ export function NotesDashboard({
   const [deletingNoteIds, setDeletingNoteIds] = useState<Set<string>>(() => new Set());
   const [sharingNoteIds, setSharingNoteIds] = useState<Set<string>>(() => new Set());
   const [mobileView, setMobileView] = useState<"folders" | "notes" | "editor">("editor");
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const sessionEndsAt = useMemo(
     () => initialLoginAt + timeoutMinutes * 60_000,
@@ -592,6 +594,16 @@ export function NotesDashboard({
             </div>
             <Button
               type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsProfileOpen(true)}
+              className="h-7 border-zinc-800 bg-zinc-900/80 px-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 sm:h-8 sm:px-3"
+            >
+              <User className="h-3.5 w-3.5 sm:mr-1.5" />
+              <span className="hidden sm:inline">Profile</span>
+            </Button>
+            <Button
+              type="button"
               variant="destructive"
               size="sm"
               onClick={handleEndSession}
@@ -807,6 +819,15 @@ export function NotesDashboard({
               <PenLine className="h-4 w-4" />
               <span>Editor</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setIsProfileOpen(true)}
+              className="flex flex-col items-center gap-0.5 px-4 py-1 text-[11px] font-medium text-zinc-500 transition hover:text-zinc-300"
+            >
+              <User className="h-4 w-4" />
+              <span>Profile</span>
+            </button>
           </nav>
         </div>
       </div>
@@ -841,6 +862,19 @@ export function NotesDashboard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Profile & Settings Dialog */}
+      <ProfileDialog
+        isOpen={isProfileOpen}
+        onOpenChange={setIsProfileOpen}
+        currentSlug={slug}
+        onSlugChanged={(newSlug) => {
+          router.replace(`/${newSlug}/notes`);
+        }}
+        onDatabaseChanged={() => {
+          void fetchFolders();
+        }}
+      />
     </main>
   );
 }
