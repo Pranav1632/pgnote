@@ -111,9 +111,20 @@ export function NoteListPanel({
         )}
 
         {activeFolderId && sortedNotes.length === 0 && (
-          <p className="px-2 py-4 text-center text-xs text-zinc-500">
-            {searchQuery ? "No matching notes." : "No notes yet in this folder."}
-          </p>
+          <div className="px-3 py-6 text-center">
+            <p className="text-xs text-zinc-500">
+              {searchQuery ? "No matching notes." : "No notes yet in this folder."}
+            </p>
+            {!searchQuery && (
+              <button
+                type="button"
+                onClick={onCreateNewNote}
+                className="mt-3 inline-flex items-center gap-1 rounded-lg border border-emerald-700/50 bg-emerald-950/30 px-3 py-1.5 text-xs text-emerald-300 transition hover:bg-emerald-900/40"
+              >
+                + Write First Note
+              </button>
+            )}
+          </div>
         )}
 
         {sortedNotes.map((note) => {
@@ -134,7 +145,7 @@ export function NoteListPanel({
               <button
                 type="button"
                 onClick={() => onOpenNote(note.id)}
-                className="w-full px-3 py-2.5 text-left"
+                className="w-full px-3 py-2.5 pr-28 text-left md:pr-3"
               >
                 <div className="mb-0.5 flex items-center gap-1.5">
                   {isPinned && <Pin className="h-3 w-3 shrink-0 text-amber-400" />}
@@ -151,7 +162,7 @@ export function NoteListPanel({
                 </p>
               </button>
 
-              <div className="absolute top-2 right-2 flex items-center gap-0.5 rounded-lg bg-zinc-950/85 p-0.5 opacity-100 backdrop-blur-sm transition md:opacity-0 md:group-hover:opacity-100">
+              <div className="absolute top-2 right-2 flex items-center gap-0.5 rounded-lg bg-zinc-950/90 p-0.5 shadow-sm backdrop-blur-sm transition md:opacity-0 md:group-hover:opacity-100">
                 <button
                   type="button"
                   aria-label={note.isPublic ? "Copy public share link" : "Create public share link"}
@@ -160,7 +171,7 @@ export function NoteListPanel({
                     onShareNote(note);
                   }}
                   disabled={isSharing}
-                  className="rounded-md p-1 text-zinc-400 transition hover:text-emerald-300 disabled:opacity-40"
+                  className="flex h-7 w-7 items-center justify-center rounded-md p-1 text-zinc-400 transition hover:text-emerald-300 disabled:opacity-40"
                 >
                   {isSharing ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -175,7 +186,7 @@ export function NoteListPanel({
                     event.stopPropagation();
                     togglePin(note.id);
                   }}
-                  className="rounded-md p-1 text-zinc-400 transition hover:text-amber-300"
+                  className="flex h-7 w-7 items-center justify-center rounded-md p-1 text-zinc-400 transition hover:text-amber-300"
                 >
                   {isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
                 </button>
@@ -186,7 +197,7 @@ export function NoteListPanel({
                     event.stopPropagation();
                     void copyNoteContent(note.content);
                   }}
-                  className="rounded-md p-1 text-zinc-400 transition hover:text-emerald-300"
+                  className="flex h-7 w-7 items-center justify-center rounded-md p-1 text-zinc-400 transition hover:text-emerald-300"
                 >
                   <Copy className="h-3.5 w-3.5" />
                 </button>
@@ -197,7 +208,7 @@ export function NoteListPanel({
                     event.stopPropagation();
                     onDeleteNote(note);
                   }}
-                  className="rounded-md p-1 text-zinc-400 transition hover:text-rose-300"
+                  className="flex h-7 w-7 items-center justify-center rounded-md p-1 text-zinc-400 transition hover:text-rose-300"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>

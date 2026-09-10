@@ -3,6 +3,7 @@
 import debounce from "debounce";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronLeft, FileText, Folder, LogOut, PenLine } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { BashTextArea } from "@/components/notes/bash-text-area";
@@ -107,6 +108,7 @@ export function NotesDashboard({
   const [isDeletingNote, setIsDeletingNote] = useState(false);
   const [deletingNoteIds, setDeletingNoteIds] = useState<Set<string>>(() => new Set());
   const [sharingNoteIds, setSharingNoteIds] = useState<Set<string>>(() => new Set());
+  const [mobileView, setMobileView] = useState<"folders" | "notes" | "editor">("editor");
 
   const sessionEndsAt = useMemo(
     () => initialLoginAt + timeoutMinutes * 60_000,
@@ -402,6 +404,12 @@ export function NotesDashboard({
     setAutoSaveDueAt(null);
     setAutoSaveRemainingMs(0);
     setSaveMessage("Folder created. Start typing your note.");
+    setMobileView("editor");
+  };
+
+  const handleSelectFolder = (folderId: string) => {
+    setActiveFolderId(folderId);
+    setMobileView("notes");
   };
 
   const handleDeleteFolder = async (folderId: string) => {
@@ -482,6 +490,7 @@ export function NotesDashboard({
     setAutoSaveDueAt(null);
     setAutoSaveRemainingMs(0);
     setSaveMessage(null);
+    setMobileView("editor");
   };
 
   const handleCreateNewNote = () => {
@@ -494,6 +503,7 @@ export function NotesDashboard({
     setAutoSaveDueAt(null);
     setAutoSaveRemainingMs(0);
     setSaveMessage("New note draft started.");
+    setMobileView("editor");
   };
 
   const handleShareNote = async (note: NoteDTO) => {
@@ -571,17 +581,24 @@ export function NotesDashboard({
     <main className="h-screen bg-zinc-950 text-zinc-100">
       <div className="flex h-full flex-col px-3 py-3 sm:px-4 md:px-5">
         {/* Top bar */}
-        <div className="mb-3 flex shrink-0 flex-col gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs tracking-[0.28em] text-zinc-500 uppercase">pgnote workspace</p>
-            <p className="text-sm text-zinc-300">/{slug}/notes</p>
+        <div className="mb-2 flex shrink-0 items-center justify-between gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-3 py-2 sm:mb-3 sm:px-4 sm:py-2.5">
+          <div className="min-w-0">
+            <p className="hidden text-[10px] tracking-[0.28em] text-zinc-500 uppercase sm:block">pgnote workspace</p>
+            <p className="truncate font-mono text-xs text-zinc-300 sm:text-sm">/{slug}/notes</p>
           </div>
-          <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-end">
-            <div className="rounded-lg border border-zinc-800 bg-black/40 px-3 py-1.5 font-mono text-sm text-emerald-400">
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="rounded-lg border border-zinc-800 bg-black/40 px-2.5 py-1 font-mono text-xs text-emerald-400 sm:px-3 sm:py-1.5 sm:text-sm">
               {formatDuration(remainingMs)}
             </div>
-            <Button type="button" variant="destructive" size="sm" onClick={handleEndSession}>
-              End Session
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={handleEndSession}
+              className="h-7 px-2.5 text-xs sm:h-8 sm:px-3"
+            >
+              <LogOut className="h-3.5 w-3.5 sm:hidden" />
+              <span className="hidden sm:inline">End Session</span>
             </Button>
           </div>
         </div>
@@ -594,8 +611,8 @@ export function NotesDashboard({
           </div>
         )}
 
-        {/* 3-panel resizable layout */}
-        <div className="min-h-0 flex-1">
+        {/* Desktop 3-panel resizable layout */}
+        <div className="hidden min-h-0 flex-1 md:block">
           <ResizablePanelGroup direction="horizontal" className="h-full rounded-xl">
             {/* Left: Folder sidebar */}
             <ResizablePanel defaultSize="18%" minSize="8%" maxSize="30%" id="sidebar">
@@ -604,7 +621,7 @@ export function NotesDashboard({
                 activeFolderId={activeFolderId}
                 isCollapsed={false}
                 onToggleCollapse={() => { }}
-                onSelectFolder={setActiveFolderId}
+                onSelectFolder={handleSelectFolder}
                 onCreateFolder={handleCreateFolder}
                 onDeleteFolder={handleDeleteFolder}
               />
@@ -657,6 +674,140 @@ export function NotesDashboard({
               />
             </ResizablePanel>
           </ResizablePanelGroup>
+        </div>
+
+        {/* Mobile adaptive single-panel view with navigation */}
+        <div className="flex min-h-0 flex-1 flex-col md:hidden">
+          {/* Mobile sub-header breadcrumb / context */}
+          <div className="mb-2 flex shrink-0 items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/40 px-3 py-1.5">
+            <div className="flex min-w-0 items-center gap-1.5 truncate">
+              {mobileView === "editor" && (
+                <button
+                  type="button"
+                  onClick={() => setMobileView("notes")}
+                  className="flex items-center gap-0.5 rounded-md px-1.5 py-1 text-xs text-emerald-400 transition hover:bg-zinc-800"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  <span>Notes</span>
+                </button>
+              )}
+              {mobileView === "notes" && (
+                <button
+                  type="button"
+                  onClick={() => setMobileView("folders")}
+                  className="flex items-center gap-0.5 rounded-md px-1.5 py-1 text-xs text-emerald-400 transition hover:bg-zinc-800"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  <span>Folders</span>
+                </button>
+              )}
+              {mobileView === "folders" && (
+                <span className="text-xs font-medium text-zinc-400">All Folders</span>
+              )}
+
+              {mobileView !== "folders" && activeFolder && (
+                <span className="truncate text-xs font-semibold text-zinc-200">
+                  / {activeFolder.name}
+                </span>
+              )}
+            </div>
+
+            {mobileView === "notes" && (
+              <button
+                type="button"
+                onClick={handleCreateNewNote}
+                className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-xs text-emerald-300"
+              >
+                + New Note
+              </button>
+            )}
+          </div>
+
+          {/* Active mobile panel */}
+          <div className="min-h-0 flex-1">
+            {mobileView === "folders" && (
+              <FolderSidebar
+                folders={folders}
+                activeFolderId={activeFolderId}
+                isCollapsed={false}
+                onToggleCollapse={() => { }}
+                onSelectFolder={handleSelectFolder}
+                onCreateFolder={handleCreateFolder}
+                onDeleteFolder={handleDeleteFolder}
+              />
+            )}
+
+            {mobileView === "notes" && (
+              <NoteListPanel
+                notes={notes}
+                activeNoteId={activeNoteId}
+                deletingNoteIds={deletingNoteIds}
+                sharingNoteIds={sharingNoteIds}
+                onOpenNote={handleOpenNote}
+                onDeleteNote={(note) => setPendingDeleteNote(note)}
+                onShareNote={handleShareNote}
+                onCreateNewNote={handleCreateNewNote}
+                activeFolderId={activeFolderId}
+              />
+            )}
+
+            {mobileView === "editor" && (
+              <div className="h-full">
+                <BashTextArea
+                  value={editorContent}
+                  onChange={handleEditorChange}
+                  onSave={handleManualSave}
+                  isSaving={isSaving}
+                  saveState={saveState}
+                  autosaveSeconds={autosaveSeconds}
+                  lastSavedAt={lastSavedAt}
+                  disabled={!activeFolderId || isLoadingFolders || isLoadingNotes}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Mobile Bottom Tab Bar */}
+          <nav className="mt-2 flex shrink-0 items-center justify-around rounded-2xl border border-zinc-800 bg-zinc-950/90 py-1.5 shadow-lg backdrop-blur">
+            <button
+              type="button"
+              onClick={() => setMobileView("folders")}
+              className={`flex flex-col items-center gap-0.5 px-4 py-1 text-[11px] font-medium transition ${
+                mobileView === "folders"
+                  ? "font-semibold text-emerald-400"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              <Folder className="h-4 w-4" />
+              <span>Folders ({folders.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMobileView("notes")}
+              className={`flex flex-col items-center gap-0.5 px-4 py-1 text-[11px] font-medium transition ${
+                mobileView === "notes"
+                  ? "font-semibold text-emerald-400"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              <FileText className="h-4 w-4" />
+              <span>Notes ({notes.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMobileView("editor")}
+              className={`flex flex-col items-center gap-0.5 px-4 py-1 text-[11px] font-medium transition ${
+                mobileView === "editor"
+                  ? "font-semibold text-emerald-400"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              <PenLine className="h-4 w-4" />
+              <span>Editor</span>
+            </button>
+          </nav>
         </div>
       </div>
 

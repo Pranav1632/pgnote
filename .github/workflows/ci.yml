@@ -1,0 +1,51 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  lint-and-build:
+    name: Lint & Build Verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run ESLint
+        run: pnpm lint
+
+      - name: Run Next.js Production Build
+        run: pnpm build
+        env:
+          MONGODB_URI: "mongodb+srv://ci_user:ci_password@cluster.net/pgnote?retryWrites=true&w=majority"
+          SESSION_SECRET: "ci_session_secret_at_least_32_chars_1234567890"
+          UPSTASH_REDIS_REST_URL: "https://honest-weasel-166659.upstash.io"
+          UPSTASH_REDIS_REST_TOKEN: "ci_token"
+          NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+          SMTP_HOST: "smtp.gmail.com"
+          SMTP_PORT: "587"
+          SMTP_USER: "ci@example.com"
+          SMTP_PASS: "ci_pass"
+          SMTP_FROM: "pgnote <ci@example.com>"
+          NODE_ENV: "production"

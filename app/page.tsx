@@ -148,7 +148,7 @@ const differentiators = [
 export default function HomePage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-zinc-950 text-zinc-100">
-      <div className="fixed right-4 bottom-4 z-20 flex flex-col gap-2 md:top-1/2 md:bottom-auto md:-translate-y-1/2">
+      <div className="hidden md:flex fixed right-4 top-1/2 -translate-y-1/2 z-20 flex-col gap-2">
         <Button
           asChild
           size="sm"

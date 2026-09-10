@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 export default function SignupPage() {
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-[#fafafa]">
-      <div className="fixed right-4 bottom-4 z-20 flex flex-col gap-2 md:top-1/2 md:bottom-auto md:-translate-y-1/2">
+      <div className="hidden md:flex fixed right-4 top-1/2 -translate-y-1/2 z-20 flex-col gap-2">
         <Button
           asChild
           size="sm"
@@ -24,7 +24,15 @@ export default function SignupPage() {
         </Button>
       </div>
 
-      <div className="mx-auto w-full max-w-6xl px-5 py-12 md:px-8 md:py-16">
+      <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 md:px-8 md:py-16">
+        <div className="mb-6 flex items-center justify-between md:hidden">
+          <Link href="/" className="text-xs text-zinc-400 transition hover:text-zinc-200">
+            ← Home
+          </Link>
+          <Link href="/#open-slug" className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-300">
+            /{`{slug}`}
+          </Link>
+        </div>
         <header className="mb-10 space-y-3">
           <p className="text-xs tracking-[0.26em] text-zinc-500 uppercase">pgnote / signup</p>
           <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">

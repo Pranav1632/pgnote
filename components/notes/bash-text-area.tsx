@@ -95,7 +95,7 @@ export function BashTextArea({
   return (
     <div className="flex h-full flex-col rounded-2xl border border-zinc-800 bg-black/70 shadow-[0_0_0_1px_rgba(39,39,42,0.35)]">
       {/* Toolbar */}
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-zinc-800/60 px-4 py-2.5">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-800/60 px-3 py-2 sm:px-4 sm:py-2.5">
         <div className="flex items-center gap-2">
           <p className="text-xs tracking-[0.22em] text-zinc-500 uppercase">Editor</p>
           <button
@@ -107,17 +107,17 @@ export function BashTextArea({
             {showPreview ? (
               <>
                 <EyeOff className="h-3 w-3" />
-                Edit
+                <span>Edit</span>
               </>
             ) : (
               <>
                 <Eye className="h-3 w-3" />
-                Preview
+                <span>Preview</span>
               </>
             )}
           </button>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             type="button"
             onClick={() => void handleCopyAll()}
@@ -126,7 +126,7 @@ export function BashTextArea({
             title="Copy all content"
           >
             <Copy className="h-3 w-3" />
-            Copy
+            <span className="hidden sm:inline">Copy</span>
           </button>
           <SaveStatus state={saveState} autosaveSeconds={autosaveSeconds} lastSavedAt={lastSavedAt} />
           <Button type="button" size="xs" variant="outline" onClick={onSave} disabled={disabled || isSaving}>
@@ -139,7 +139,7 @@ export function BashTextArea({
       <div className="relative min-h-0 flex-1">
         {showPreview ? (
           <div
-            className="h-full overflow-y-auto px-4 py-3 font-mono text-sm leading-7 text-emerald-400/90"
+            className="h-full overflow-y-auto px-4 py-3 font-mono text-base leading-7 text-emerald-400/90 md:text-sm"
             dangerouslySetInnerHTML={{ __html: renderSimpleMarkdown(value) }}
           />
         ) : (
@@ -151,20 +151,25 @@ export function BashTextArea({
             spellCheck={false}
             disabled={disabled}
             placeholder="$ paste your private notes here..."
-            className="h-full w-full resize-none rounded-none border-none bg-transparent px-4 py-3 font-mono text-sm leading-7 text-emerald-400 outline-none placeholder:text-emerald-800 focus:ring-0"
+            className="h-full w-full resize-none rounded-none border-none bg-transparent px-4 py-3 font-mono text-base leading-7 text-emerald-400 outline-none placeholder:text-emerald-800 focus:ring-0 md:text-sm"
           />
         )}
       </div>
 
       {/* Status bar */}
-      <div className="flex shrink-0 items-center justify-between border-t border-zinc-800/60 px-4 py-1.5">
+      <div className="flex shrink-0 items-center justify-between border-t border-zinc-800/60 px-3 py-1.5 sm:px-4">
         <div className="flex items-center gap-3 text-[10px] text-zinc-500">
           <span>{wordCount} words</span>
           <span className="text-zinc-700">|</span>
           <span>{charCount} chars</span>
         </div>
         <div className="text-[10px] text-zinc-600">
-          <kbd className="rounded border border-zinc-700 px-1 py-0.5 text-zinc-500">Ctrl+S</kbd> save
+          <span className="hidden sm:inline">
+            <kbd className="rounded border border-zinc-700 px-1 py-0.5 text-zinc-500">Ctrl+S</kbd> save
+          </span>
+          <span className="text-[10px] text-zinc-500 sm:hidden">
+            {saveState === "saved" ? "✓ Saved" : saveState === "saving" ? "Saving..." : "Unsaved"}
+          </span>
         </div>
       </div>
     </div>
