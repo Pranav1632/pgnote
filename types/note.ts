@@ -8,6 +8,8 @@ export interface NoteDTO {
   id: string;
   folderId: string;
   content: string;
+  isPublic: boolean;
+  shareToken?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -2,7 +2,7 @@ import "server-only";
 
 import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/db";
-import { inferInfraErrorCode } from "@/lib/error-utils";
+import { inferInfraErrorCode, logServerError } from "@/lib/error-utils";
 import { FolderModel, getFolderModel } from "@/models/Folder";
 import { NoteModel, getNoteModel } from "@/models/Note";
 import { UserModel } from "@/models/User";
@@ -58,6 +58,17 @@ async function ensureCustomConnectionReady(uri: string): Promise<MongooseConnect
   if (cacheEntry.connection?.readyState === 1 && cacheEntry.initializationPromise) {
     await cacheEntry.initializationPromise;
     return cacheEntry.connection;
+  }
+
+  if (cacheEntry.connection && cacheEntry.connection.readyState !== 1) {
+    // If the connection exists but is no longer connected (e.g. Next.js HMR broke it),
+    // clear it out and reconnect.
+    try {
+      await cacheEntry.connection.close();
+    } catch { }
+    cacheEntry.connection = null;
+    cacheEntry.connectionPromise = null;
+    cacheEntry.initializationPromise = null;
   }
 
   if (!cacheEntry.connectionPromise) {
@@ -134,6 +145,7 @@ export async function getNoteStorageContextForUser(userId: string): Promise<Note
       usingCustomDatabase: true,
     };
   } catch (error) {
+    logServerError("note-storage/custom-connection", error);
     throw new NoteStorageError(
       "Unable to connect to custom note storage.",
       inferInfraErrorCode(error, "CUSTOM_MONGO_FAILED"),

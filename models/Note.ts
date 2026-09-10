@@ -6,6 +6,8 @@ export interface INote {
   userId: string;
   folderId: string;
   content: string;
+  isPublic: boolean;
+  shareToken?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,6 +32,19 @@ const noteSchema = new Schema(
       minlength: 1,
       maxlength: 200_000,
     },
+    isPublic: {
+      type: Boolean,
+      required: true,
+      default: false,
+    },
+    shareToken: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      minlength: 8,
+      maxlength: 64,
+      default: undefined,
+    },
   },
   {
     timestamps: true,
@@ -39,6 +54,7 @@ const noteSchema = new Schema(
 
 noteSchema.index({ userId: 1, updatedAt: -1 });
 noteSchema.index({ userId: 1, folderId: 1, updatedAt: -1 });
+noteSchema.index({ userId: 1, shareToken: 1 }, { unique: true, sparse: true });
 
 export const NoteModel = mongoose.models.Note ?? mongoose.model<INote>("Note", noteSchema);
 

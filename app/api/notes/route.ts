@@ -13,6 +13,8 @@ function toNoteDTO(note: {
   _id: unknown;
   folderId: unknown;
   content: string;
+  isPublic?: boolean;
+  shareToken?: string;
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -20,6 +22,8 @@ function toNoteDTO(note: {
     id: String(note._id),
     folderId: String(note.folderId),
     content: note.content,
+    isPublic: note.isPublic ?? false,
+    shareToken: note.shareToken,
     createdAt: new Date(note.createdAt).toISOString(),
     updatedAt: new Date(note.updatedAt).toISOString(),
   };
@@ -57,6 +61,8 @@ export async function GET(request: NextRequest) {
       _id: unknown;
       folderId: unknown;
       content: string;
+      isPublic?: boolean;
+      shareToken?: string;
       createdAt: Date;
       updatedAt: Date;
     }>;
@@ -68,6 +74,8 @@ export async function GET(request: NextRequest) {
           _id: note._id,
           folderId: note.folderId,
           content: note.content,
+          isPublic: note.isPublic,
+          shareToken: note.shareToken,
           createdAt: note.createdAt,
           updatedAt: note.updatedAt,
         })
@@ -139,6 +147,8 @@ export async function POST(request: NextRequest) {
           _id: createdNote._id,
           folderId: createdNote.folderId,
           content: createdNote.content,
+          isPublic: createdNote.isPublic,
+          shareToken: createdNote.shareToken,
           createdAt: createdNote.createdAt,
           updatedAt: createdNote.updatedAt,
         }),
@@ -230,6 +240,8 @@ export async function PATCH(request: NextRequest) {
         _id: updatedNote._id,
         folderId: updatedNote.folderId,
         content: updatedNote.content,
+        isPublic: updatedNote.isPublic,
+        shareToken: updatedNote.shareToken,
         createdAt: updatedNote.createdAt,
         updatedAt: updatedNote.updatedAt,
       }),

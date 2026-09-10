@@ -46,7 +46,6 @@ export async function requireValidSession(expectedSlug?: string): Promise<AppSes
   }
 
   if (isSessionExpired(session)) {
-    session.destroy();
     return null;
   }
 
@@ -69,7 +68,6 @@ export async function requireSession(expectedSlug?: string): Promise<IronSession
   }
 
   if (isSessionExpired(session)) {
-    session.destroy();
     return null;
   }
 

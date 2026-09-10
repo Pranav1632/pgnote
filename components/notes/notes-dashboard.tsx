@@ -106,6 +106,7 @@ export function NotesDashboard({
   const [pendingDeleteNote, setPendingDeleteNote] = useState<NoteDTO | null>(null);
   const [isDeletingNote, setIsDeletingNote] = useState(false);
   const [deletingNoteIds, setDeletingNoteIds] = useState<Set<string>>(() => new Set());
+  const [sharingNoteIds, setSharingNoteIds] = useState<Set<string>>(() => new Set());
 
   const sessionEndsAt = useMemo(
     () => initialLoginAt + timeoutMinutes * 60_000,
@@ -495,6 +496,53 @@ export function NotesDashboard({
     setSaveMessage("New note draft started.");
   };
 
+  const handleShareNote = async (note: NoteDTO) => {
+    setSharingNoteIds((prev) => {
+      const next = new Set(prev);
+      next.add(note.id);
+      return next;
+    });
+
+    try {
+      const response = await fetch(`/api/notes/${note.id}/share`, { method: "POST" });
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      const payload = await parseApiResponse<{ shareId: string; sharePath: string }>(response);
+      if (!response.ok || !payload.success) {
+        toast.error(getFailureMessage(payload, "Unable to create share link."));
+        return;
+      }
+
+      const shareToken = payload.data.shareId.split(".").slice(1).join(".");
+      setNotes((prevNotes) =>
+        prevNotes.map((existingNote) =>
+          existingNote.id === note.id
+            ? {
+              ...existingNote,
+              isPublic: true,
+              shareToken: shareToken || existingNote.shareToken,
+            }
+            : existingNote
+        )
+      );
+
+      const absoluteUrl = `${window.location.origin}${payload.data.sharePath}`;
+      await navigator.clipboard.writeText(absoluteUrl);
+      toast.success("Public link copied to clipboard.", { duration: 1800 });
+    } catch {
+      toast.error("Unable to create share link.");
+    } finally {
+      setSharingNoteIds((prev) => {
+        const next = new Set(prev);
+        next.delete(note.id);
+        return next;
+      });
+    }
+  };
+
   const handleEndSession = async () => {
     await logoutAndRedirect("manual");
   };
@@ -600,8 +648,10 @@ export function NotesDashboard({
                 notes={notes}
                 activeNoteId={activeNoteId}
                 deletingNoteIds={deletingNoteIds}
+                sharingNoteIds={sharingNoteIds}
                 onOpenNote={handleOpenNote}
                 onDeleteNote={(note) => setPendingDeleteNote(note)}
+                onShareNote={handleShareNote}
                 onCreateNewNote={handleCreateNewNote}
                 activeFolderId={activeFolderId}
               />
