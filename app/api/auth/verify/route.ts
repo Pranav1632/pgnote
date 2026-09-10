@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { buildSessionData, getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
+import { inferInfraErrorCode, logServerError } from "@/lib/error-utils";
 import { errorResponse, getClientIp, successResponse } from "@/lib/http";
 import {
   checkLoginRateLimit,
@@ -83,7 +84,9 @@ export async function POST(request: NextRequest) {
       slug: user.slug,
       redirectTo: `/${user.slug}/notes`,
     });
-  } catch {
-    return errorResponse(500, "Request failed.");
+  } catch (error: unknown) {
+    const errorCode = inferInfraErrorCode(error, "VERIFY_FAILED");
+    logServerError("api/auth/verify", error, { errorCode });
+    return errorResponse(500, "Request failed.", errorCode);
   }
 }

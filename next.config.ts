@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
       "frame-ancestors 'none'",
       "object-src 'none'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-      "style-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline' https://www.gstatic.com",
       "img-src 'self' data: blob:",
       "font-src 'self' data:",
       "connect-src 'self' https://*.upstash.io",

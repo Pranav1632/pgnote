@@ -6,6 +6,7 @@ import {
   generateRawKey,
   normalizeSlug,
 } from "@/lib/auth";
+import { inferInfraErrorCode, logServerError } from "@/lib/error-utils";
 import { errorResponse, successResponse } from "@/lib/http";
 import { storeChallenge } from "@/lib/redis";
 import { challengeRequestSchema } from "@/lib/validators";
@@ -49,7 +50,9 @@ export async function POST(request: NextRequest) {
       challenge,
       keyLength: user.algo.keyLength,
     });
-  } catch {
-    return errorResponse(500, "Request failed.");
+  } catch (error: unknown) {
+    const errorCode = inferInfraErrorCode(error, "CHALLENGE_FAILED");
+    logServerError("api/auth/challenge", error, { errorCode });
+    return errorResponse(500, "Request failed.", errorCode);
   }
 }
