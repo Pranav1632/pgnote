@@ -12,37 +12,71 @@ GitHub natively renders Mermaid diagrams. Below are the comprehensive architectu
 ### 1. System Component Architecture
 
 ```mermaid
-graph TD
-    Client["Client Browser<br/>(React 19 / Tailwind / Radix UI)"]
-
-    subgraph NextServer["Next.js 16 App Router (Server)"]
-        Pages["Server & Client Components<br/>(/{slug}, /{slug}/notes, /public/{shareId})"]
-        AuthAPI["Auth API Handlers<br/>(/api/auth/challenge, /api/auth/verify, /recovery)"]
-        NoteAPI["Notes & Folders API<br/>(/api/notes, /api/folders, /share)"]
-        StorageRouter["Dynamic Storage Router<br/>(lib/note-storage.ts)"]
-        SessionMgr["Session Manager<br/>(iron-session sealed cookies)"]
+flowchart TD
+    subgraph ClientTier["Client Layer"]
+        Browser["User Browser<br/>(React 19 / Tailwind CSS v4 / Radix UI)"]
+        Cookies["Client Storage<br/>(Sealed iron-session Cookie)"]
     end
 
-    subgraph CacheAndLimits["Upstash Redis"]
-        RedisChallenges["Ephemeral Challenges<br/>(120s TTL)"]
-        RateLimiter["Sliding Window Rate Limiter<br/>(IP + Slug tracking)"]
+    subgraph AppServer["Next.js 16 Application Server"]
+        subgraph UILayer["App Router (Pages & Views)"]
+            Home["Landing / Entry<br/>(/)"]
+            AuthView["Challenge Screen<br/>(/{slug})"]
+            NotesView["3-Panel Workspace<br/>(/{slug}/notes)"]
+            PublicView["Public Note Viewer<br/>(/public/{shareId})"]
+        end
+
+        subgraph APILayer["API Route Handlers"]
+            AuthRoute["Auth Endpoints<br/>(/api/auth/challenge, /verify, /logout)"]
+            RecoveryRoute["Recovery Endpoint<br/>(/api/auth/recovery)"]
+            NotesRoute["Notes & Folders Endpoints<br/>(/api/notes, /api/folders, /share)"]
+        end
+
+        subgraph CoreServices["Server Services & Middleware"]
+            SessionHandler["Session Handler<br/>(lib/session.ts)"]
+            PasskeyEngine["Algo Engine<br/>(lib/passkey.ts & algo-description.ts)"]
+            Mailer["Mailer Service<br/>(lib/mailer.ts / Nodemailer)"]
+            StorageRouter["Dynamic Storage Engine<br/>(lib/note-storage.ts)"]
+        end
     end
 
-    subgraph DataTier["Data Persistence"]
-        CoreMongo[("Primary MongoDB<br/>(User Metadata, Algo Config, Slugs)")]
-        UserMongo[("User Custom MongoDB (BYOD)<br/>(Isolated Notes & Folders)")]
+    subgraph FastTier["Upstash Redis (In-Memory / Edge)"]
+        ChallengeCache["Challenge Store<br/>(Key: pgnote:challenge:{id} | 120s TTL)"]
+        RateLimits["Sliding Window Rate Limiter<br/>(Login: 5/15m | Recovery: 3/10m)"]
+        RecoveryCooldown["Recovery Cooldown Store<br/>(5m TTL)"]
     end
 
-    Client -->|HTTPS Requests| Pages
-    Pages --> AuthAPI
-    Pages --> NoteAPI
-    AuthAPI --> SessionMgr
-    AuthAPI --> RedisChallenges
-    AuthAPI --> RateLimiter
-    AuthAPI --> CoreMongo
-    NoteAPI --> StorageRouter
-    StorageRouter -->|Default Route| CoreMongo
-    StorageRouter -->|Custom URI Configured| UserMongo
+    subgraph PersistenceTier["Database Layer"]
+        PrimaryDB[("Primary MongoDB<br/>(Users, Slugs, Default Folders & Notes)")]
+        UserDB[("User External MongoDB (BYOD)<br/>(Isolated Custom Notes & Folders)")]
+    end
+
+    %% Client to UI Routing
+    Browser <--> Cookies
+    Browser -->|HTTP GET Navigation| UILayer
+
+    %% Client Fetch to APIs
+    Browser -->|POST Challenge & Verify| AuthRoute
+    Browser -->|POST Recovery Request| RecoveryRoute
+    Browser -->|CRUD Notes & Folders| NotesRoute
+    PublicView --> StorageRouter
+
+    %% API to Internal Services
+    AuthRoute --> SessionHandler
+    AuthRoute --> PasskeyEngine
+    AuthRoute --> RateLimits
+    AuthRoute --> ChallengeCache
+    AuthRoute --> PrimaryDB
+    SessionHandler <-->|Read / Write Sealed Cookie| Cookies
+
+    RecoveryRoute --> RateLimits
+    RecoveryRoute --> RecoveryCooldown
+    RecoveryRoute --> PrimaryDB
+    RecoveryRoute --> Mailer
+
+    NotesRoute --> StorageRouter
+    StorageRouter -->|Default User Storage| PrimaryDB
+    StorageRouter -->|Custom MongoDB URI (BYOD)| UserDB
 ```
 
 ---
