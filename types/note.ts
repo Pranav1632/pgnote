@@ -1,6 +1,7 @@
 export interface FolderDTO {
   id: string;
   name: string;
+  isPinned: boolean;
   createdAt: string;
 }
 

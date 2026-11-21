@@ -109,6 +109,7 @@ export function NotesDashboard({
   const [isDeletingNote, setIsDeletingNote] = useState(false);
   const [deletingNoteIds, setDeletingNoteIds] = useState<Set<string>>(() => new Set());
   const [sharingNoteIds, setSharingNoteIds] = useState<Set<string>>(() => new Set());
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [mobileView, setMobileView] = useState<"folders" | "notes" | "editor">("editor");
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
@@ -444,6 +445,42 @@ export function NotesDashboard({
     }
   };
 
+  const handleTogglePinFolder = async (folderId: string, isPinned: boolean) => {
+    setFolders((prevFolders) =>
+      prevFolders.map((f) => (f.id === folderId ? { ...f, isPinned } : f))
+    );
+
+    try {
+      const response = await fetch(`/api/folders/${folderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPinned }),
+      });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      if (!response.ok) {
+        setFolders((prevFolders) =>
+          prevFolders.map((f) => (f.id === folderId ? { ...f, isPinned: !isPinned } : f))
+        );
+        toast.error("Failed to update folder pin status.");
+        return;
+      }
+
+      toast.success(isPinned ? "Folder pinned to top." : "Folder unpinned.", {
+        duration: 1500,
+      });
+    } catch {
+      setFolders((prevFolders) =>
+        prevFolders.map((f) => (f.id === folderId ? { ...f, isPinned: !isPinned } : f))
+      );
+      toast.error("Network error while updating folder pin status.");
+    }
+  };
+
   const handleDeleteNote = async () => {
     if (!pendingDeleteNote) return;
     setIsDeletingNote(true);
@@ -627,15 +664,21 @@ export function NotesDashboard({
         <div className="hidden min-h-0 flex-1 md:block">
           <ResizablePanelGroup direction="horizontal" className="h-full rounded-xl">
             {/* Left: Folder sidebar */}
-            <ResizablePanel defaultSize="18%" minSize="8%" maxSize="30%" id="sidebar">
+            <ResizablePanel
+              defaultSize={isSidebarCollapsed ? "6%" : "18%"}
+              minSize={isSidebarCollapsed ? "5%" : "8%"}
+              maxSize="30%"
+              id="sidebar"
+            >
               <FolderSidebar
                 folders={folders}
                 activeFolderId={activeFolderId}
-                isCollapsed={false}
-                onToggleCollapse={() => { }}
+                isCollapsed={isSidebarCollapsed}
+                onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
                 onSelectFolder={handleSelectFolder}
                 onCreateFolder={handleCreateFolder}
                 onDeleteFolder={handleDeleteFolder}
+                onTogglePinFolder={handleTogglePinFolder}
               />
             </ResizablePanel>
 
@@ -746,6 +789,7 @@ export function NotesDashboard({
                 onSelectFolder={handleSelectFolder}
                 onCreateFolder={handleCreateFolder}
                 onDeleteFolder={handleDeleteFolder}
+                onTogglePinFolder={handleTogglePinFolder}
               />
             )}
 

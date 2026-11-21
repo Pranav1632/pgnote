@@ -14,11 +14,13 @@ const DEFAULT_FOLDER_NAME = "Inbox";
 function toFolderDTO(folder: {
   _id: unknown;
   name: string;
+  isPinned?: boolean;
   createdAt: Date;
 }) {
   return {
     id: String(folder._id),
     name: folder.name,
+    isPinned: Boolean(folder.isPinned),
     createdAt: new Date(folder.createdAt).toISOString(),
   };
 }
@@ -36,7 +38,7 @@ export async function GET() {
     usingCustomDatabase = noteStorage.usingCustomDatabase;
     const { folderModel } = noteStorage;
     let folders = await folderModel.find({ userId: session.userId })
-      .sort({ createdAt: 1 })
+      .sort({ isPinned: -1, createdAt: 1 })
       .lean();
 
     if (folders.length === 0) {
@@ -47,6 +49,7 @@ export async function GET() {
             $setOnInsert: {
               userId: session.userId,
               name: DEFAULT_FOLDER_NAME,
+              isPinned: false,
             },
           },
           { upsert: true }
@@ -58,13 +61,14 @@ export async function GET() {
       }
 
       folders = await folderModel.find({ userId: session.userId })
-        .sort({ createdAt: 1 })
+        .sort({ isPinned: -1, createdAt: 1 })
         .lean();
     }
 
     const typedFolders = folders as Array<{
       _id: unknown;
       name: string;
+      isPinned?: boolean;
       createdAt: Date;
     }>;
 
@@ -75,6 +79,7 @@ export async function GET() {
         toFolderDTO({
           _id: folder._id,
           name: folder.name,
+          isPinned: folder.isPinned,
           createdAt: folder.createdAt,
         })
       ),
@@ -134,6 +139,7 @@ export async function POST(request: NextRequest) {
         folder: toFolderDTO({
           _id: createdFolder._id,
           name: createdFolder.name,
+          isPinned: createdFolder.isPinned,
           createdAt: createdFolder.createdAt,
         }),
       },

@@ -54,7 +54,13 @@ const noteSchema = new Schema(
 
 noteSchema.index({ userId: 1, updatedAt: -1 });
 noteSchema.index({ userId: 1, folderId: 1, updatedAt: -1 });
-noteSchema.index({ userId: 1, shareToken: 1 }, { unique: true, sparse: true });
+noteSchema.index(
+  { userId: 1, shareToken: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { shareToken: { $type: "string" } },
+  }
+);
 
 export const NoteModel = mongoose.models.Note ?? mongoose.model<INote>("Note", noteSchema);
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { PanelLeftClose, PanelLeftOpen, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { PanelLeftClose, PanelLeftOpen, Pin, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -24,6 +24,7 @@ interface FolderSidebarProps {
   onSelectFolder: (folderId: string) => void;
   onCreateFolder: (name: string) => Promise<void>;
   onDeleteFolder: (folderId: string) => Promise<void>;
+  onTogglePinFolder?: (folderId: string, isPinned: boolean) => Promise<void>;
 }
 
 function folderShortName(name: string): string {
@@ -42,6 +43,7 @@ export function FolderSidebar({
   onSelectFolder,
   onCreateFolder,
   onDeleteFolder,
+  onTogglePinFolder,
 }: FolderSidebarProps) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -49,6 +51,15 @@ export function FolderSidebar({
   const [createError, setCreateError] = useState<string | null>(null);
   const [pendingDeleteFolder, setPendingDeleteFolder] = useState<FolderDTO | null>(null);
   const [isDeletingFolder, setIsDeletingFolder] = useState(false);
+
+  const sortedFolders = useMemo(() => {
+    return [...folders].sort((a, b) => {
+      if (Boolean(a.isPinned) !== Boolean(b.isPinned)) {
+        return a.isPinned ? -1 : 1;
+      }
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+  }, [folders]);
 
   const handleCreateFolder = async () => {
     const trimmedName = newFolderName.trim();
@@ -159,11 +170,11 @@ export function FolderSidebar({
       )}
 
       <div className="space-y-2">
-        {folders.length === 0 && !isCollapsed && (
+        {sortedFolders.length === 0 && !isCollapsed && (
           <p className="text-sm text-zinc-400">No folders yet. Create one to start taking notes.</p>
         )}
 
-        {folders.map((folder) => (
+        {sortedFolders.map((folder) => (
           <div
             key={folder.id}
             className={`group relative rounded-xl border transition ${activeFolderId === folder.id
@@ -174,16 +185,24 @@ export function FolderSidebar({
             <button
               type="button"
               onClick={() => onSelectFolder(folder.id)}
-              className={`w-full text-left ${isCollapsed ? "px-1 py-2 text-center" : "px-3 py-2"}`}
+              className={`w-full text-left ${isCollapsed ? "px-1 py-2 text-center" : "px-3 py-2 pr-16"}`}
               title={folder.name}
             >
               {isCollapsed ? (
-                <div className="font-mono text-sm font-semibold text-zinc-100">
+                <div className="relative font-mono text-sm font-semibold text-zinc-100">
                   {folderShortName(folder.name)}
+                  {folder.isPinned && (
+                    <Pin className="absolute -top-1 -right-1 h-2.5 w-2.5 fill-emerald-400 text-emerald-400" />
+                  )}
                 </div>
               ) : (
                 <>
-                  <div className="font-medium">{folder.name}</div>
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <span className="truncate">{folder.name}</span>
+                    {folder.isPinned && (
+                      <Pin className="h-3 w-3 shrink-0 fill-emerald-400 text-emerald-400" />
+                    )}
+                  </div>
                   <div className="mt-1 text-xs text-zinc-500">
                     {new Date(folder.createdAt).toLocaleString()}
                   </div>
@@ -192,49 +211,74 @@ export function FolderSidebar({
             </button>
 
             {!isCollapsed && (
-              <AlertDialog
-                open={pendingDeleteFolder?.id === folder.id}
-                onOpenChange={(open) => {
-                  if (open) {
-                    setPendingDeleteFolder(folder);
-                    return;
-                  }
-                  if (!isDeletingFolder) {
-                    setPendingDeleteFolder(null);
-                  }
-                }}
-              >
-                <AlertDialogTrigger asChild>
+              <div className="absolute top-2 right-2 flex items-center gap-0.5">
+                {onTogglePinFolder && (
                   <button
                     type="button"
-                    className="absolute top-2 right-2 rounded-md border border-transparent p-1 text-zinc-500 opacity-100 transition hover:border-zinc-700 hover:text-rose-300 md:opacity-0 md:group-hover:opacity-100"
-                    aria-label={`Delete folder ${folder.name}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void onTogglePinFolder(folder.id, !folder.isPinned);
+                    }}
+                    className={`rounded-md p-1 transition ${
+                      folder.isPinned
+                        ? "text-emerald-400 opacity-100 hover:text-emerald-300"
+                        : "text-zinc-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:text-zinc-200"
+                    }`}
+                    title={folder.isPinned ? "Unpin folder" : "Pin folder to top"}
+                    aria-label={folder.isPinned ? `Unpin folder ${folder.name}` : `Pin folder ${folder.name}`}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Pin
+                      className={`h-3.5 w-3.5 ${
+                        folder.isPinned ? "fill-emerald-400 text-emerald-400" : ""
+                      }`}
+                    />
                   </button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete folder and all its notes?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This will permanently delete &quot;{folder.name}&quot; and ALL notes inside it.
-                      This cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel disabled={isDeletingFolder}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      disabled={isDeletingFolder}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        void handleDeleteFolder();
-                      }}
+                )}
+
+                <AlertDialog
+                  open={pendingDeleteFolder?.id === folder.id}
+                  onOpenChange={(open) => {
+                    if (open) {
+                      setPendingDeleteFolder(folder);
+                      return;
+                    }
+                    if (!isDeletingFolder) {
+                      setPendingDeleteFolder(null);
+                    }
+                  }}
+                >
+                  <AlertDialogTrigger asChild>
+                    <button
+                      type="button"
+                      className="rounded-md border border-transparent p-1 text-zinc-500 opacity-100 transition hover:border-zinc-700 hover:text-rose-300 md:opacity-0 md:group-hover:opacity-100"
+                      aria-label={`Delete folder ${folder.name}`}
                     >
-                      {isDeletingFolder ? "Deleting..." : "Delete Everything"}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete folder and all its notes?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete &quot;{folder.name}&quot; and ALL notes inside it.
+                        This cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={isDeletingFolder}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        disabled={isDeletingFolder}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          void handleDeleteFolder();
+                        }}
+                      >
+                        {isDeletingFolder ? "Deleting..." : "Delete Everything"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             )}
           </div>
         ))}

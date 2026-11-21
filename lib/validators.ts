@@ -104,6 +104,11 @@ export const createFolderRequestSchema = z.object({
   name: z.string().trim().min(1).max(80),
 });
 
+export const updateFolderRequestSchema = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  isPinned: z.boolean().optional(),
+});
+
 export const createNoteRequestSchema = z.object({
   folderId: objectIdSchema,
   content: z.string().min(1).max(200_000),
