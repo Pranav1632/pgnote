@@ -3,13 +3,15 @@
 import debounce from "debounce";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, FileText, Folder, LogOut, PenLine, User } from "lucide-react";
+import { ChevronLeft, FileText, Folder, LogOut, PenLine, Search, User } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { BashTextArea } from "@/components/notes/bash-text-area";
+import { CommandPalette } from "@/components/notes/command-palette";
 import { FolderSidebar } from "@/components/notes/folder-sidebar";
 import { NoteListPanel } from "@/components/notes/note-list-panel";
 import { ProfileDialog } from "@/components/profile/profile-dialog";
+import { createNoteSearchIndex, type NoteSearchDatabase } from "@/lib/search";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -114,6 +116,8 @@ export function NotesDashboard({
   const sidebarPanelRef = usePanelRef();
   const [mobileView, setMobileView] = useState<"folders" | "notes" | "editor">("editor");
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [searchDb, setSearchDb] = useState<NoteSearchDatabase | null>(null);
 
   const sessionEndsAt = useMemo(
     () => initialLoginAt + timeoutMinutes * 60_000,
@@ -255,6 +259,35 @@ export function NotesDashboard({
   useEffect(() => {
     void fetchFolders();
   }, [fetchFolders]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function buildIndex() {
+      if (notes.length === 0) return;
+      const folderMap = new Map(folders.map((f) => [f.id, f.name]));
+      const searchableNotes = notes.map((note) => ({
+        id: note.id,
+        folderId: note.folderId,
+        folderName: folderMap.get(note.folderId) ?? "Notes",
+        title: notePreviewText(note.content, 50),
+        content: note.content,
+      }));
+
+      try {
+        const db = await createNoteSearchIndex(searchableNotes);
+        if (!cancelled) {
+          setSearchDb(db);
+        }
+      } catch {}
+    }
+
+    void buildIndex();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [notes, folders]);
 
   useEffect(() => {
     if (!activeFolderId) {
@@ -722,12 +755,15 @@ export function NotesDashboard({
     await logoutAndRedirect("manual");
   };
 
-  // Keyboard shortcuts: Ctrl+N (new note)
+  // Keyboard shortcuts: Ctrl+N (new note), Ctrl+K (spotlight search)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "n") {
         e.preventDefault();
         handleCreateNewNote();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -755,6 +791,20 @@ export function NotesDashboard({
             <div className="rounded-lg border border-zinc-800 bg-black/40 px-2.5 py-1 font-mono text-xs text-emerald-400 sm:px-3 sm:py-1.5 sm:text-sm">
               {formatDuration(remainingMs)}
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCommandPaletteOpen(true)}
+              className="h-7 border-zinc-800 bg-zinc-900/80 px-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 sm:h-8 sm:px-3"
+              title="Open Spotlight Search (Ctrl+K)"
+            >
+              <Search className="h-3.5 w-3.5 sm:mr-1.5 text-emerald-400" />
+              <span className="hidden sm:inline">Search</span>
+              <kbd className="ml-1.5 hidden rounded border border-zinc-800 bg-zinc-950 px-1 py-0.2 text-[9px] text-zinc-500 lg:inline">
+                Ctrl+K
+              </kbd>
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -1056,6 +1106,38 @@ export function NotesDashboard({
         }}
         onDatabaseChanged={() => {
           void fetchFolders();
+        }}
+      />
+
+      {/* Global Spotlight Search Command Palette */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onOpenChange={setIsCommandPaletteOpen}
+        searchDb={searchDb}
+        folders={folders}
+        activeFolderId={activeFolderId}
+        activeNote={notes.find((n) => n.id === activeNoteId) ?? null}
+        onSelectNote={(noteId, folderId) => {
+          if (folderId !== activeFolderId) {
+            setActiveFolderId(folderId);
+          }
+          handleOpenNote(noteId);
+        }}
+        onSelectFolder={(folderId) => {
+          handleSelectFolder(folderId);
+        }}
+        onCreateNewNote={handleCreateNewNote}
+        onCreateFolderClick={() => {
+          setMobileView("folders");
+        }}
+        onCopyCurrentNote={() => {
+          if (editorContent) {
+            void navigator.clipboard.writeText(editorContent);
+            toast.success("Note copied to clipboard.");
+          }
+        }}
+        onExportCurrentNote={() => {
+          handleExportNote(activeFolder?.name ?? "note", editorContent);
         }}
       />
     </main>
