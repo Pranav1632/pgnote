@@ -1,10 +1,29 @@
 "use client";
 
-import { type ClipboardEvent, useEffect, useRef, useState, useMemo } from "react";
-import { Copy, Download, Eye, EyeOff } from "lucide-react";
+import {
+  type ClipboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+} from "react";
+import {
+  Bold,
+  Code,
+  Copy,
+  Download,
+  Eye,
+  EyeOff,
+  Hash,
+  Italic,
+  List,
+  ListTodo,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { SaveStatus, type SaveStatusState } from "@/components/notes/save-status";
+import { parseMarkdown } from "@/lib/markdown";
 
 interface BashTextAreaProps {
   value: string;
@@ -24,53 +43,6 @@ function countWords(text: string): number {
   return trimmed.split(/\s+/).length;
 }
 
-function renderSimpleMarkdown(text: string): string {
-  // Safe HTML escape first
-  let html = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-
-  // Code blocks: ```lang ... ```
-  html = html.replace(/```([\s\S]*?)```/g, (_match, code) => {
-    return `<pre class="my-3 overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-xs text-emerald-300 font-mono"><code>${code.trim()}</code></pre>`;
-  });
-
-  // Blockquotes
-  html = html.replace(/^&gt; (.+)$/gm, '<blockquote class="border-l-2 border-emerald-500/60 pl-3 my-2 text-zinc-400 italic">$1</blockquote>');
-
-  // Headings
-  html = html
-    .replace(/^### (.+)$/gm, '<h3 class="text-base font-bold text-zinc-100 mt-4 mb-1">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-bold text-zinc-100 mt-5 mb-1">$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold text-zinc-100 mt-6 mb-2">$1</h1>');
-
-  // Checkboxes
-  html = html
-    .replace(/^- \[x\] (.+)$/gim, '<div class="flex items-center gap-2 text-zinc-400 line-through my-1"><input type="checkbox" checked disabled class="accent-emerald-500 rounded" /><span>$1</span></div>')
-    .replace(/^- \[ \] (.+)$/gim, '<div class="flex items-center gap-2 text-zinc-200 my-1"><input type="checkbox" disabled class="accent-emerald-500 rounded" /><span>$1</span></div>');
-
-  // Horizontal rules
-  html = html.replace(/^---$/gm, '<hr class="my-4 border-zinc-800" />');
-
-  // Bold & Italic & Inline Code
-  html = html
-    .replace(/\*\*(.+?)\*\*/g, '<strong class="text-zinc-100 font-semibold">$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em class="text-zinc-300 italic">$1</em>')
-    .replace(/`([^`]+)`/g, '<code class="rounded bg-zinc-800/80 px-1.5 py-0.5 text-emerald-300 text-xs font-mono border border-zinc-700/50">$1</code>');
-
-  // Links: [text](url)
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-400 underline hover:text-emerald-300">$1</a>');
-
-  // Bullet and numbered lists
-  html = html
-    .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc text-zinc-300">$1</li>')
-    .replace(/^(\d+)\. (.+)$/gm, '<li class="ml-4 list-decimal text-zinc-300">$2</li>');
-
-  // Line breaks
-  return html.replace(/\n/g, "<br />");
-}
-
 export function BashTextArea({
   value,
   onChange,
@@ -84,9 +56,12 @@ export function BashTextArea({
 }: BashTextAreaProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [showLineNumbers, setShowLineNumbers] = useState(true);
 
   const wordCount = useMemo(() => countWords(value), [value]);
   const charCount = value.length;
+  const lines = useMemo(() => value.split("\n"), [value]);
+  const lineCount = Math.max(1, lines.length);
 
   const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     if (disabled) return;
@@ -113,43 +88,210 @@ export function BashTextArea({
     }
   };
 
-  // Keyboard shortcuts
+  const wrapSelection = (before: string, after: string = before, placeholder = "") => {
+    const textarea = textareaRef.current;
+    if (!textarea || disabled) return;
+
+    const start = textarea.selectionStart ?? 0;
+    const end = textarea.selectionEnd ?? 0;
+    const selected = value.slice(start, end) || placeholder;
+
+    const nextValue = value.slice(0, start) + before + selected + after + value.slice(end);
+    onChange(nextValue);
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.selectionStart = start + before.length;
+      textarea.selectionEnd = start + before.length + selected.length;
+    });
+  };
+
+  const handleKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (disabled) return;
+
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    // 1. Tab key: insert 2 spaces
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const nextValue = value.substring(0, start) + "  " + value.substring(end);
+      onChange(nextValue);
+      requestAnimationFrame(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + 2;
+      });
+      return;
+    }
+
+    // 2. Auto-closing pairs: (), [], {}, "", '', ``
+    const pairs: Record<string, string> = {
+      "(": ")",
+      "[": "]",
+      "{": "}",
+      '"': '"',
+      "'": "'",
+      "`": "`",
+    };
+
+    if (pairs[e.key] && textarea.selectionStart === textarea.selectionEnd) {
+      const start = textarea.selectionStart;
+      const closeChar = pairs[e.key];
+      const nextValue = value.substring(0, start) + e.key + closeChar + value.substring(start);
+      e.preventDefault();
+      onChange(nextValue);
+      requestAnimationFrame(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + 1;
+      });
+      return;
+    }
+
+    // 3. Enter key on list items: auto-continue lists
+    if (e.key === "Enter") {
+      const start = textarea.selectionStart;
+      const currentLine = value.substring(0, start).split("\n").pop() ?? "";
+
+      const taskMatch = /^- \[([ x])\]\s+/i.exec(currentLine);
+      const listMatch = /^-\s+/.exec(currentLine);
+
+      if (taskMatch) {
+        if (currentLine.trim() === "- [ ]" || currentLine.trim() === "- [x]") {
+          // Empty item, cancel list on Enter
+          e.preventDefault();
+          const lineStart = start - currentLine.length;
+          const nextValue = value.substring(0, lineStart) + value.substring(start);
+          onChange(nextValue);
+          return;
+        }
+        e.preventDefault();
+        const nextValue = value.substring(0, start) + "\n- [ ] " + value.substring(start);
+        onChange(nextValue);
+        requestAnimationFrame(() => {
+          textarea.selectionStart = textarea.selectionEnd = start + 7;
+        });
+        return;
+      }
+
+      if (listMatch) {
+        if (currentLine.trim() === "-") {
+          e.preventDefault();
+          const lineStart = start - currentLine.length;
+          const nextValue = value.substring(0, lineStart) + value.substring(start);
+          onChange(nextValue);
+          return;
+        }
+        e.preventDefault();
+        const nextValue = value.substring(0, start) + "\n- " + value.substring(start);
+        onChange(nextValue);
+        requestAnimationFrame(() => {
+          textarea.selectionStart = textarea.selectionEnd = start + 3;
+        });
+        return;
+      }
+    }
+  };
+
+  // Keyboard shortcut Ctrl+S
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
         if (!disabled && !isSaving) onSave();
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, [onSave, disabled, isSaving]);
 
   return (
     <div className="flex h-full flex-col rounded-2xl border border-zinc-800 bg-black/70 shadow-[0_0_0_1px_rgba(39,39,42,0.35)]">
       {/* Toolbar */}
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-800/60 px-3 py-2 sm:px-4 sm:py-2.5">
-        <div className="flex items-center gap-2">
-          <p className="text-xs tracking-[0.22em] text-zinc-500 uppercase">Editor</p>
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <p className="hidden text-xs tracking-[0.22em] text-zinc-500 uppercase md:inline">Editor</p>
+
           <button
             type="button"
             onClick={() => setShowPreview((prev) => !prev)}
-            className="flex items-center gap-1 rounded-md border border-zinc-700 px-2 py-1 text-[10px] font-medium text-zinc-400 transition hover:border-emerald-700 hover:text-emerald-300"
+            className="flex items-center gap-1 rounded-md border border-zinc-700 bg-zinc-900/50 px-2 py-1 text-[10px] font-medium text-zinc-300 transition hover:border-emerald-600 hover:text-emerald-300"
             title={showPreview ? "Show editor" : "Preview markdown"}
           >
             {showPreview ? (
               <>
-                <EyeOff className="h-3 w-3" />
+                <EyeOff className="h-3 w-3 text-emerald-400" />
                 <span>Edit</span>
               </>
             ) : (
               <>
-                <Eye className="h-3 w-3" />
+                <Eye className="h-3 w-3 text-zinc-400" />
                 <span>Preview</span>
               </>
             )}
           </button>
+
+          {!showPreview && (
+            <div className="hidden items-center gap-0.5 border-l border-zinc-800 pl-1.5 sm:flex">
+              <button
+                type="button"
+                onClick={() => wrapSelection("**", "**", "bold text")}
+                className="rounded p-1 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100"
+                title="Bold (Ctrl+B)"
+              >
+                <Bold className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => wrapSelection("*", "*", "italic text")}
+                className="rounded p-1 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100"
+                title="Italic (Ctrl+I)"
+              >
+                <Italic className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => wrapSelection("`", "`", "code")}
+                className="rounded p-1 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100"
+                title="Inline Code"
+              >
+                <Code className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => wrapSelection("```bash\n", "\n```", "#!/bin/bash")}
+                className="rounded px-1.5 py-0.5 font-mono text-[10px] text-zinc-400 transition hover:bg-zinc-800 hover:text-emerald-300"
+                title="Code Block"
+              >
+                &lt;/&gt;
+              </button>
+              <button
+                type="button"
+                onClick={() => wrapSelection("- ", "", "List item")}
+                className="rounded p-1 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100"
+                title="Bullet List"
+              >
+                <List className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => wrapSelection("- [ ] ", "", "Task")}
+                className="rounded p-1 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100"
+                title="Checklist Item"
+              >
+                <ListTodo className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowLineNumbers((prev) => !prev)}
+                className={`rounded p-1 text-zinc-400 transition hover:bg-zinc-800 ${showLineNumbers ? "text-emerald-400" : ""}`}
+                title="Toggle Line Numbers"
+              >
+                <Hash className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </div>
+
         <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             type="button"
@@ -180,37 +322,56 @@ export function BashTextArea({
         </div>
       </div>
 
-      {/* Editor / Preview */}
-      <div className="relative min-h-0 flex-1">
+      {/* Editor / Preview Area */}
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {showPreview ? (
           <div
-            className="h-full overflow-y-auto px-4 py-3 font-mono text-base leading-7 text-emerald-400/90 md:text-sm"
-            dangerouslySetInnerHTML={{ __html: renderSimpleMarkdown(value) }}
+            className="h-full w-full overflow-y-auto px-4 py-3 font-mono text-base leading-7 text-emerald-400/90 md:text-sm"
+            dangerouslySetInnerHTML={{ __html: parseMarkdown(value) }}
           />
         ) : (
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            onPaste={handlePaste}
-            spellCheck={false}
-            disabled={disabled}
-            placeholder="$ paste your private notes here..."
-            className="h-full w-full resize-none rounded-none border-none bg-transparent px-4 py-3 font-mono text-base leading-7 text-emerald-400 outline-none placeholder:text-emerald-800 focus:ring-0 md:text-sm"
-          />
+          <div className="flex h-full w-full overflow-hidden">
+            {/* Line numbers gutter */}
+            {showLineNumbers && (
+              <div
+                aria-hidden="true"
+                className="hidden select-none border-r border-zinc-800/80 bg-zinc-950/40 px-2.5 py-3 text-right font-mono text-xs text-zinc-700 sm:block"
+                style={{ minWidth: "3rem" }}
+              >
+                {Array.from({ length: lineCount }, (_, i) => (
+                  <div key={i + 1} className="leading-7">
+                    {i + 1}
+                  </div>
+                ))}
+              </div>
+            )}
+            <textarea
+              ref={textareaRef}
+              value={value}
+              onChange={(event) => onChange(event.target.value)}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              spellCheck={false}
+              disabled={disabled}
+              placeholder="$ paste your private notes here..."
+              className="h-full w-full resize-none rounded-none border-none bg-transparent px-4 py-3 font-mono text-base leading-7 text-emerald-400 outline-none placeholder:text-emerald-800 focus:ring-0 md:text-sm"
+            />
+          </div>
         )}
       </div>
 
       {/* Status bar */}
       <div className="flex shrink-0 items-center justify-between border-t border-zinc-800/60 px-3 py-1.5 sm:px-4">
         <div className="flex items-center gap-3 text-[10px] text-zinc-500">
+          <span>{lineCount} lines</span>
+          <span className="text-zinc-700">|</span>
           <span>{wordCount} words</span>
           <span className="text-zinc-700">|</span>
           <span>{charCount} chars</span>
         </div>
         <div className="text-[10px] text-zinc-600">
           <span className="hidden sm:inline">
-            <kbd className="rounded border border-zinc-700 px-1 py-0.5 text-zinc-500">Ctrl+S</kbd> save
+            <kbd className="rounded border border-zinc-700 px-1 py-0.5 text-zinc-500">Tab</kbd> indent · <kbd className="rounded border border-zinc-700 px-1 py-0.5 text-zinc-500">Ctrl+S</kbd> save
           </span>
           <span className="text-[10px] text-zinc-500 sm:hidden">
             {saveState === "saved" ? "✓ Saved" : saveState === "saving" ? "Saving..." : "Unsaved"}
