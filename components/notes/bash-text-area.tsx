@@ -1,7 +1,7 @@
 "use client";
 
 import { type ClipboardEvent, useEffect, useRef, useState, useMemo } from "react";
-import { Copy, Eye, EyeOff } from "lucide-react";
+import { Copy, Download, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { SaveStatus, type SaveStatusState } from "@/components/notes/save-status";
@@ -10,6 +10,7 @@ interface BashTextAreaProps {
   value: string;
   onChange: (nextValue: string) => void;
   onSave: () => void;
+  onExport?: () => void;
   isSaving: boolean;
   saveState: SaveStatusState;
   autosaveSeconds: number | null;
@@ -24,19 +25,50 @@ function countWords(text: string): number {
 }
 
 function renderSimpleMarkdown(text: string): string {
-  return text
+  // Safe HTML escape first
+  let html = text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/^### (.+)$/gm, '<h3 class="text-base font-bold text-zinc-100 mt-3 mb-1">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-bold text-zinc-100 mt-4 mb-1">$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold text-zinc-100 mt-4 mb-2">$1</h1>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong class="text-zinc-100">$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`(.+?)`/g, '<code class="rounded bg-zinc-800 px-1 py-0.5 text-emerald-300 text-xs">$1</code>')
+    .replace(/>/g, "&gt;");
+
+  // Code blocks: ```lang ... ```
+  html = html.replace(/```([\s\S]*?)```/g, (_match, code) => {
+    return `<pre class="my-3 overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-xs text-emerald-300 font-mono"><code>${code.trim()}</code></pre>`;
+  });
+
+  // Blockquotes
+  html = html.replace(/^&gt; (.+)$/gm, '<blockquote class="border-l-2 border-emerald-500/60 pl-3 my-2 text-zinc-400 italic">$1</blockquote>');
+
+  // Headings
+  html = html
+    .replace(/^### (.+)$/gm, '<h3 class="text-base font-bold text-zinc-100 mt-4 mb-1">$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-bold text-zinc-100 mt-5 mb-1">$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold text-zinc-100 mt-6 mb-2">$1</h1>');
+
+  // Checkboxes
+  html = html
+    .replace(/^- \[x\] (.+)$/gim, '<div class="flex items-center gap-2 text-zinc-400 line-through my-1"><input type="checkbox" checked disabled class="accent-emerald-500 rounded" /><span>$1</span></div>')
+    .replace(/^- \[ \] (.+)$/gim, '<div class="flex items-center gap-2 text-zinc-200 my-1"><input type="checkbox" disabled class="accent-emerald-500 rounded" /><span>$1</span></div>');
+
+  // Horizontal rules
+  html = html.replace(/^---$/gm, '<hr class="my-4 border-zinc-800" />');
+
+  // Bold & Italic & Inline Code
+  html = html
+    .replace(/\*\*(.+?)\*\*/g, '<strong class="text-zinc-100 font-semibold">$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em class="text-zinc-300 italic">$1</em>')
+    .replace(/`([^`]+)`/g, '<code class="rounded bg-zinc-800/80 px-1.5 py-0.5 text-emerald-300 text-xs font-mono border border-zinc-700/50">$1</code>');
+
+  // Links: [text](url)
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-400 underline hover:text-emerald-300">$1</a>');
+
+  // Bullet and numbered lists
+  html = html
     .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc text-zinc-300">$1</li>')
-    .replace(/^(\d+)\. (.+)$/gm, '<li class="ml-4 list-decimal text-zinc-300">$2</li>')
-    .replace(/\n/g, "<br />");
+    .replace(/^(\d+)\. (.+)$/gm, '<li class="ml-4 list-decimal text-zinc-300">$2</li>');
+
+  // Line breaks
+  return html.replace(/\n/g, "<br />");
 }
 
 export function BashTextArea({
@@ -47,6 +79,7 @@ export function BashTextArea({
   saveState,
   autosaveSeconds,
   lastSavedAt,
+  onExport,
   disabled = false,
 }: BashTextAreaProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -128,6 +161,18 @@ export function BashTextArea({
             <Copy className="h-3 w-3" />
             <span className="hidden sm:inline">Copy</span>
           </button>
+          {onExport && (
+            <button
+              type="button"
+              onClick={onExport}
+              disabled={disabled || value.length === 0}
+              className="flex items-center gap-1 rounded-md border border-zinc-700 px-2 py-1 text-[10px] font-medium text-zinc-400 transition hover:border-emerald-700 hover:text-emerald-300 disabled:opacity-40"
+              title="Export note as .md"
+            >
+              <Download className="h-3 w-3" />
+              <span className="hidden sm:inline">Export</span>
+            </button>
+          )}
           <SaveStatus state={saveState} autosaveSeconds={autosaveSeconds} lastSavedAt={lastSavedAt} />
           <Button type="button" size="xs" variant="outline" onClick={onSave} disabled={disabled || isSaving}>
             {isSaving ? "Saving…" : "Save"}

@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Copy, Loader2, Pin, PinOff, Search, Share2, Trash2 } from "lucide-react";
+import { Copy, Download, FolderInput, Loader2, Pin, PinOff, Search, Share2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import type { NoteDTO } from "@/types";
+import type { FolderDTO, NoteDTO } from "@/types";
 
 interface NoteListPanelProps {
   notes: NoteDTO[];
@@ -15,6 +15,9 @@ interface NoteListPanelProps {
   onShareNote: (note: NoteDTO) => void;
   onCreateNewNote: () => void;
   activeFolderId: string | null;
+  folders?: FolderDTO[];
+  onMoveNote?: (noteId: string, targetFolderId: string) => Promise<void>;
+  onExportNote?: (note: NoteDTO) => void;
 }
 
 function extractTitle(content: string): string {
@@ -32,6 +35,20 @@ function extractPreview(content: string, maxLength = 120): string {
   return `${preview.slice(0, maxLength)}...`;
 }
 
+function getStoredPinnedNotes(storageKey: string): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        return new Set(parsed);
+      }
+    }
+  } catch {}
+  return new Set();
+}
+
 export function NoteListPanel({
   notes,
   activeNoteId,
@@ -42,20 +59,37 @@ export function NoteListPanel({
   onShareNote,
   onCreateNewNote,
   activeFolderId,
+  folders = [],
+  onMoveNote,
+  onExportNote,
 }: NoteListPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [pinnedNoteIds, setPinnedNoteIds] = useState<Set<string>>(() => new Set());
+  const storageKey = `pgnote_pinned_notes_${activeFolderId ?? "global"}`;
+  const [pinnedMap, setPinnedMap] = useState<Record<string, string[]>>({});
+  const [movingNoteId, setMovingNoteId] = useState<string | null>(null);
+
+  const pinnedNoteIds = useMemo(() => {
+    if (pinnedMap[storageKey]) {
+      return new Set(pinnedMap[storageKey]);
+    }
+    return getStoredPinnedNotes(storageKey);
+  }, [storageKey, pinnedMap]);
 
   const togglePin = (noteId: string) => {
-    setPinnedNoteIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(noteId)) {
-        next.delete(noteId);
-      } else {
-        next.add(noteId);
-      }
-      return next;
-    });
+    const current = pinnedMap[storageKey]
+      ? new Set(pinnedMap[storageKey])
+      : getStoredPinnedNotes(storageKey);
+    const next = new Set(current);
+    if (next.has(noteId)) {
+      next.delete(noteId);
+    } else {
+      next.add(noteId);
+    }
+    const nextArr = Array.from(next);
+    setPinnedMap((prev) => ({ ...prev, [storageKey]: nextArr }));
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(nextArr));
+    } catch {}
   };
 
   const copyNoteContent = async (content: string) => {
@@ -198,9 +232,65 @@ export function NoteListPanel({
                     void copyNoteContent(note.content);
                   }}
                   className="flex h-7 w-7 items-center justify-center rounded-md p-1 text-zinc-400 transition hover:text-emerald-300"
+                  title="Copy content"
                 >
                   <Copy className="h-3.5 w-3.5" />
                 </button>
+                {onExportNote && (
+                  <button
+                    type="button"
+                    aria-label="Export note as markdown"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onExportNote(note);
+                    }}
+                    className="flex h-7 w-7 items-center justify-center rounded-md p-1 text-zinc-400 transition hover:text-emerald-300"
+                    title="Export note (.md)"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                {onMoveNote && folders.length > 1 && (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      aria-label="Move note to folder"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setMovingNoteId((prev) => (prev === note.id ? null : note.id));
+                      }}
+                      className="flex h-7 w-7 items-center justify-center rounded-md p-1 text-zinc-400 transition hover:text-emerald-300"
+                      title="Move note to another folder"
+                    >
+                      <FolderInput className="h-3.5 w-3.5" />
+                    </button>
+                    {movingNoteId === note.id && (
+                      <div
+                        onClick={(event) => event.stopPropagation()}
+                        className="absolute right-0 top-8 z-30 min-w-36 rounded-lg border border-zinc-700 bg-zinc-900 p-1 shadow-xl"
+                      >
+                        <p className="px-2 py-1 text-[10px] font-semibold text-zinc-400 uppercase">
+                          Move to folder
+                        </p>
+                        {folders
+                          .filter((f) => f.id !== activeFolderId)
+                          .map((targetFolder) => (
+                            <button
+                              key={targetFolder.id}
+                              type="button"
+                              onClick={() => {
+                                setMovingNoteId(null);
+                                void onMoveNote(note.id, targetFolder.id);
+                              }}
+                              className="w-full truncate rounded px-2 py-1 text-left text-xs text-zinc-200 transition hover:bg-zinc-800 hover:text-emerald-300"
+                            >
+                              {targetFolder.name}
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <button
                   type="button"
                   aria-label="Delete note"
@@ -209,6 +299,7 @@ export function NoteListPanel({
                     onDeleteNote(note);
                   }}
                   className="flex h-7 w-7 items-center justify-center rounded-md p-1 text-zinc-400 transition hover:text-rose-300"
+                  title="Delete note"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>

@@ -14,6 +14,7 @@ import {
   ResizablePanelGroup,
   ResizablePanel,
   ResizableHandle,
+  usePanelRef,
 } from "@/components/ui/resizable-panel";
 import {
   AlertDialog,
@@ -110,6 +111,7 @@ export function NotesDashboard({
   const [deletingNoteIds, setDeletingNoteIds] = useState<Set<string>>(() => new Set());
   const [sharingNoteIds, setSharingNoteIds] = useState<Set<string>>(() => new Set());
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const sidebarPanelRef = usePanelRef();
   const [mobileView, setMobileView] = useState<"folders" | "notes" | "editor">("editor");
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
@@ -481,6 +483,130 @@ export function NotesDashboard({
     }
   };
 
+  const handleToggleSidebar = () => {
+    const panel = sidebarPanelRef.current;
+    if (!panel) return;
+    if (isSidebarCollapsed) {
+      panel.expand();
+      setIsSidebarCollapsed(false);
+    } else {
+      panel.collapse();
+      setIsSidebarCollapsed(true);
+    }
+  };
+
+  const handleRenameFolder = async (folderId: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) {
+      toast.error("Folder name cannot be empty.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/folders/${folderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      const payload = await parseApiResponse<{ folder: FolderDTO }>(response);
+      if (!response.ok || !payload.success) {
+        const errorMsg =
+          response.status === 409 ? "Folder already exists." : "Unable to rename folder.";
+        toast.error(getFailureMessage(payload, errorMsg));
+        throw new Error(getFailureMessage(payload, errorMsg));
+      }
+
+      setFolders((prev) =>
+        prev.map((f) => (f.id === folderId ? { ...f, name: payload.data.folder.name } : f))
+      );
+      toast.success("Folder renamed.", { duration: 1500 });
+    } catch (error) {
+      if (error instanceof Error && error.message) {
+        throw error;
+      }
+      toast.error("Failed to rename folder.");
+      throw new Error("Failed to rename folder.");
+    }
+  };
+
+  const handleMoveNote = async (noteId: string, targetFolderId: string) => {
+    if (targetFolderId === activeFolderId) return;
+
+    try {
+      const currentNote = notes.find((n) => n.id === noteId);
+      if (!currentNote) return;
+
+      const response = await fetch("/api/notes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          noteId,
+          folderId: targetFolderId,
+          content: currentNote.content,
+        }),
+      });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      const payload = await parseApiResponse<{ note: NoteDTO }>(response);
+      if (!response.ok || !payload.success) {
+        toast.error(getFailureMessage(payload, "Unable to move note."));
+        return;
+      }
+
+      setNotes((prevNotes) => {
+        const nextNotes = prevNotes.filter((n) => n.id !== noteId);
+        if (activeNoteId === noteId) {
+          const nextActive = nextNotes[0];
+          debouncedSave.clear();
+          setActiveNoteId(nextActive?.id ?? null);
+          setEditorContent(nextActive?.content ?? "");
+          lastSavedContentRef.current = nextActive?.content ?? "";
+          setSaveState("saved");
+          setLastSavedAt(parseTimestamp(nextActive?.updatedAt));
+          setAutoSaveDueAt(null);
+          setAutoSaveRemainingMs(0);
+          setSaveMessage(null);
+        }
+        return nextNotes;
+      });
+
+      const targetFolder = folders.find((f) => f.id === targetFolderId);
+      toast.success(`Note moved to ${targetFolder?.name ?? "folder"}.`, {
+        duration: 1800,
+      });
+    } catch {
+      toast.error("Network error while moving note.");
+    }
+  };
+
+  const handleExportNote = (title: string, content: string) => {
+    const safeTitle = (title || "untitled")
+      .replace(/[^\w\s-]/gi, "")
+      .trim()
+      .replace(/\s+/g, "_")
+      .slice(0, 40) || "note";
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${safeTitle}.md`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success("Note exported as .md", { duration: 1500 });
+  };
+
   const handleDeleteNote = async () => {
     if (!pendingDeleteNote) return;
     setIsDeletingNote(true);
@@ -665,19 +791,23 @@ export function NotesDashboard({
           <ResizablePanelGroup direction="horizontal" className="h-full rounded-xl">
             {/* Left: Folder sidebar */}
             <ResizablePanel
-              defaultSize={isSidebarCollapsed ? "6%" : "18%"}
-              minSize={isSidebarCollapsed ? "5%" : "8%"}
-              maxSize="30%"
+              panelRef={sidebarPanelRef}
+              defaultSize="18%"
+              minSize="10%"
+              maxSize="35%"
+              collapsible
+              collapsedSize="4%"
               id="sidebar"
             >
               <FolderSidebar
                 folders={folders}
                 activeFolderId={activeFolderId}
                 isCollapsed={isSidebarCollapsed}
-                onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+                onToggleCollapse={handleToggleSidebar}
                 onSelectFolder={handleSelectFolder}
                 onCreateFolder={handleCreateFolder}
                 onDeleteFolder={handleDeleteFolder}
+                onRenameFolder={handleRenameFolder}
                 onTogglePinFolder={handleTogglePinFolder}
               />
             </ResizablePanel>
@@ -702,6 +832,7 @@ export function NotesDashboard({
                     value={editorContent}
                     onChange={handleEditorChange}
                     onSave={handleManualSave}
+                    onExport={() => handleExportNote(activeFolder?.name ?? "note", editorContent)}
                     isSaving={isSaving}
                     saveState={saveState}
                     autosaveSeconds={autosaveSeconds}
@@ -726,6 +857,9 @@ export function NotesDashboard({
                 onShareNote={handleShareNote}
                 onCreateNewNote={handleCreateNewNote}
                 activeFolderId={activeFolderId}
+                folders={folders}
+                onMoveNote={handleMoveNote}
+                onExportNote={(note) => handleExportNote(notePreviewText(note.content, 25), note.content)}
               />
             </ResizablePanel>
           </ResizablePanelGroup>
@@ -789,6 +923,7 @@ export function NotesDashboard({
                 onSelectFolder={handleSelectFolder}
                 onCreateFolder={handleCreateFolder}
                 onDeleteFolder={handleDeleteFolder}
+                onRenameFolder={handleRenameFolder}
                 onTogglePinFolder={handleTogglePinFolder}
               />
             )}
@@ -804,6 +939,9 @@ export function NotesDashboard({
                 onShareNote={handleShareNote}
                 onCreateNewNote={handleCreateNewNote}
                 activeFolderId={activeFolderId}
+                folders={folders}
+                onMoveNote={handleMoveNote}
+                onExportNote={(note) => handleExportNote(notePreviewText(note.content, 25), note.content)}
               />
             )}
 
@@ -813,6 +951,7 @@ export function NotesDashboard({
                   value={editorContent}
                   onChange={handleEditorChange}
                   onSave={handleManualSave}
+                  onExport={() => handleExportNote(activeFolder?.name ?? "note", editorContent)}
                   isSaving={isSaving}
                   saveState={saveState}
                   autosaveSeconds={autosaveSeconds}
