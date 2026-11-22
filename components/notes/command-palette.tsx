@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Command } from "cmdk";
-import { Copy, Download, FileText, Folder, Plus, Search } from "lucide-react";
+import { Archive, Copy, Download, FileText, Folder, Plus, Search } from "lucide-react";
 import { queryNotes, type NoteSearchDatabase, type SearchableNote } from "@/lib/search";
 import type { FolderDTO, NoteDTO } from "@/types";
 
@@ -19,6 +19,7 @@ interface CommandPaletteProps {
   onCreateFolderClick: () => void;
   onCopyCurrentNote: () => void;
   onExportCurrentNote: () => void;
+  onExportVault?: () => void;
 }
 
 export function CommandPalette({
@@ -33,6 +34,7 @@ export function CommandPalette({
   onCreateFolderClick,
   onCopyCurrentNote,
   onExportCurrentNote,
+  onExportVault,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchableNote[]>([]);
@@ -188,6 +190,20 @@ export function CommandPalette({
                     <span>Export Current Note (.md)</span>
                   </Command.Item>
                 </>
+              )}
+
+              {onExportVault && (
+                <Command.Item
+                  value="action-export-vault-zip"
+                  onSelect={() => {
+                    onExportVault();
+                    onOpenChange(false);
+                  }}
+                  className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-zinc-200 transition hover:bg-zinc-900 data-[selected=true]:bg-zinc-850"
+                >
+                  <Archive className="h-4 w-4 text-emerald-400" />
+                  <span>Export Complete Vault (.zip)</span>
+                </Command.Item>
               )}
             </Command.Group>
 

@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react";
 import {
+  Archive,
   Check,
   CheckCircle2,
   Database,
+  Download,
   Eye,
   EyeOff,
+  FolderArchive,
   KeyRound,
   Loader2,
   RefreshCw,
@@ -25,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { UserProfileDTO } from "@/types";
+import { downloadVaultZip } from "@/lib/vault-export";
 
 interface ProfileDialogProps {
   isOpen: boolean;
@@ -34,7 +38,7 @@ interface ProfileDialogProps {
   onDatabaseChanged?: () => void;
 }
 
-type TabType = "general" | "database" | "security";
+type TabType = "general" | "database" | "security" | "backup";
 
 export function ProfileDialog({
   isOpen,
@@ -46,6 +50,7 @@ export function ProfileDialog({
   const [activeTab, setActiveTab] = useState<TabType>("general");
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [isTestingMongo, setIsTestingMongo] = useState(false);
   const [showMongoPassword, setShowMongoPassword] = useState(false);
 
@@ -215,6 +220,32 @@ export function ProfileDialog({
     }
   };
 
+  const handleExportVault = async () => {
+    setIsExporting(true);
+    const toastId = toast.loading("Generating your vault backup archive...");
+    try {
+      const [notesRes, foldersRes] = await Promise.all([
+        fetch("/api/notes").then((r) => r.json()),
+        fetch("/api/folders").then((r) => r.json()),
+      ]);
+
+      if (!notesRes.success || !foldersRes.success) {
+        toast.error("Failed to load notes or folders for backup.", { id: toastId });
+        return;
+      }
+
+      const notes = notesRes.data ?? [];
+      const folders = foldersRes.data ?? [];
+
+      const filename = await downloadVaultZip(notes, folders, slug || currentSlug);
+      toast.success(`Vault exported successfully: ${filename}`, { id: toastId });
+    } catch {
+      toast.error("Failed to export vault archive.", { id: toastId });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
@@ -269,6 +300,18 @@ export function ProfileDialog({
           >
             <ShieldCheck className="h-3.5 w-3.5" />
             <span>Security</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("backup")}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+              activeTab === "backup"
+                ? "bg-zinc-800 text-zinc-100"
+                : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+            }`}
+          >
+            <Archive className="h-3.5 w-3.5" />
+            <span>Vault Backup</span>
           </button>
         </div>
 
@@ -513,6 +556,46 @@ export function ProfileDialog({
                   <div className="flex justify-between py-1 pt-1.5">
                     <span className="text-zinc-500">Last Successful Login</span>
                     <span className="font-mono text-zinc-300">{formatDate(profile?.lastLogin)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* BACKUP & EXPORT TAB */}
+            {activeTab === "backup" && (
+              <div className="flex flex-col gap-3 text-sm">
+                <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+                  <div className="flex items-center gap-2 text-zinc-100">
+                    <FolderArchive className="h-4 w-4 text-emerald-400" />
+                    <span className="text-xs font-semibold">Full Vault Export (.zip)</span>
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-zinc-400">
+                    Export your complete knowledge base into standard, open Markdown (<code className="text-emerald-400 font-mono">.md</code>) files organized into folders with YAML frontmatter.
+                  </p>
+                  <ul className="mt-2.5 space-y-1 text-[11px] text-zinc-500">
+                    <li>• Completely compatible with Obsidian, Logseq, VS Code, and Git</li>
+                    <li>• Preserves folder organization and creation timestamps</li>
+                    <li>• Zero vendor lock-in — own and back up your data locally</li>
+                  </ul>
+                  <div className="mt-4 pt-3 border-t border-zinc-800/80">
+                    <Button
+                      type="button"
+                      onClick={handleExportVault}
+                      disabled={isExporting}
+                      className="w-full bg-emerald-600 text-xs font-medium text-white hover:bg-emerald-500"
+                    >
+                      {isExporting ? (
+                        <>
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          Building Vault Archive...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="mr-1.5 h-3.5 w-3.5" />
+                          Download Complete Vault (.zip)
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </div>
               </div>

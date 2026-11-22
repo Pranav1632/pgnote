@@ -12,6 +12,7 @@ import { FolderSidebar } from "@/components/notes/folder-sidebar";
 import { NoteListPanel } from "@/components/notes/note-list-panel";
 import { ProfileDialog } from "@/components/profile/profile-dialog";
 import { createNoteSearchIndex, type NoteSearchDatabase } from "@/lib/search";
+import { downloadVaultZip } from "@/lib/vault-export";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -640,6 +641,29 @@ export function NotesDashboard({
     toast.success("Note exported as .md", { duration: 1500 });
   };
 
+  const handleExportVault = async () => {
+    const toastId = toast.loading("Generating your vault backup archive...");
+    try {
+      const [notesRes, foldersRes] = await Promise.all([
+        fetch("/api/notes").then((r) => r.json()),
+        fetch("/api/folders").then((r) => r.json()),
+      ]);
+
+      if (!notesRes.success || !foldersRes.success) {
+        toast.error("Failed to load notes or folders for backup.", { id: toastId });
+        return;
+      }
+
+      const allNotes = notesRes.data ?? [];
+      const allFolders = foldersRes.data ?? [];
+
+      const filename = await downloadVaultZip(allNotes, allFolders, slug);
+      toast.success(`Vault exported successfully: ${filename}`, { id: toastId });
+    } catch {
+      toast.error("Failed to export vault archive.", { id: toastId });
+    }
+  };
+
   const handleDeleteNote = async () => {
     if (!pendingDeleteNote) return;
     setIsDeletingNote(true);
@@ -1139,6 +1163,7 @@ export function NotesDashboard({
         onExportCurrentNote={() => {
           handleExportNote(activeFolder?.name ?? "note", editorContent);
         }}
+        onExportVault={handleExportVault}
       />
     </main>
   );
