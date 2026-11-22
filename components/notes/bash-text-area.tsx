@@ -19,11 +19,13 @@ import {
   Italic,
   List,
   ListTodo,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { SaveStatus, type SaveStatusState } from "@/components/notes/save-status";
 import { parseMarkdown } from "@/lib/markdown";
+import { isEncryptedEnvelope } from "@/lib/crypto";
 
 interface BashTextAreaProps {
   value: string;
@@ -315,6 +317,23 @@ export function BashTextArea({
               <span className="hidden sm:inline">Export</span>
             </button>
           )}
+          {/* Client-Side Encryption Indicator */}
+          <div
+            className={`hidden items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-mono transition lg:flex ${
+              isEncryptedEnvelope(value)
+                ? "border-emerald-500/30 bg-emerald-950/40 text-emerald-300"
+                : "border-zinc-800 bg-zinc-900/50 text-zinc-400"
+            }`}
+            title={
+              isEncryptedEnvelope(value)
+                ? "E2EE: Zero-knowledge AES-GCM-256 encrypted payload"
+                : "Zero-Knowledge client passkey protected"
+            }
+          >
+            <ShieldCheck className="h-3 w-3 text-emerald-400" />
+            <span>{isEncryptedEnvelope(value) ? "AES-GCM" : "E2EE"}</span>
+          </div>
+
           <SaveStatus state={saveState} autosaveSeconds={autosaveSeconds} lastSavedAt={lastSavedAt} />
           <Button type="button" size="xs" variant="outline" onClick={onSave} disabled={disabled || isSaving}>
             {isSaving ? "Saving…" : "Save"}
