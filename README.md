@@ -76,7 +76,7 @@ flowchart TD
 
     NotesRoute --> StorageRouter
     StorageRouter -->|Default User Storage| PrimaryDB
-    StorageRouter -->|Custom MongoDB URI (BYOD)| UserDB
+    StorageRouter -->|"Custom MongoDB URI (BYOD)"| UserDB
 ```
 
 ---
@@ -155,6 +155,7 @@ erDiagram
         ObjectId _id PK
         ObjectId userId FK
         string name
+        boolean isPinned "pin to top of sidebar"
         Date createdAt
         Date updatedAt
     }
@@ -177,13 +178,18 @@ erDiagram
 
 - **Zero-Password Mental Passkey:** No plaintext or hashed password stored. Ephemeral OTP challenge generated and solved mentally via personalized chunk transformations.
 - **BYOD (Bring Your Own Database):** Users can link their personal MongoDB connection string; note data never persists in the core application database.
+- **Client-Side Zero-Knowledge Encryption (E2EE):** AES-GCM-256 client-side encryption derived via PBKDF2 (100,000 rounds) using Web Crypto API. Notes can be encrypted before ever leaving the browser.
+- **Spotlight Search & Command Palette (`Ctrl+K`):** In-memory client search powered by Orama search engine and `cmdk` with typo tolerance, instant navigation, and quick commands.
+- **Advanced Markdown Editor:** Line numbers gutter, smart 2-space tab indent, auto-closing brackets/quotes `() [] {} "" '' \`\``, list auto-continuation, formatting shortcuts, and XSS-safe live preview.
+- **Full Vault Backup (.zip):** One-click export of all notes and folders into standard `.md` files organized by folder with YAML frontmatter and README index via `jszip` and `file-saver`.
+- **Progressive Web App (PWA):** Installable web app with Service Worker caching, offline shell fallback, and real-time connectivity status banner.
 - **Timing-Attack Protection:** Constant-time equality validation (`safeEqual`) prevents timing attacks during challenge checks.
 - **Upstash Redis Rate Limiting:** Sliding-window rate limiter (5 attempts / 15 mins for login; 3 attempts / 10 mins for recovery).
 - **3-Panel Resizable Dashboard:**
-  - Folders panel (collapsible, cascade delete with alert modal)
+  - Folders panel (pinning, inline renaming, collapsible, cascade delete with alert modal)
   - Full-height bash-styled editor (markdown preview, live word/char counters, Ctrl+S shortcuts)
-  - Notes list panel (search, auto-title, pin, copy, share, delete)
-- **Debounced Autosave:** 5-second inactivity autosave with inflight race-condition protection.
+  - Notes list panel (search, auto-title, pin, copy, share, delete, move folder)
+- **Debounced Autosave:** Inactivity autosave with inflight race-condition protection.
 - **Public Note Sharing:** Generate public read-only URLs at `/public/{slug}.{token}`.
 - **Encrypted Stateless Sessions:** Sealed cookie sessions powered by `iron-session` with automatic timeout detection and warnings.
 
@@ -193,9 +199,12 @@ erDiagram
 
 - **Framework:** Next.js 16 (App Router), React 19, TypeScript
 - **Styling:** Tailwind CSS v4, Radix UI Primitives, Lucide Icons, Sonner
-- **Database:** MongoDB & Mongoose 9
+- **Search:** Orama Search Engine & cmdk
+- **Database:** MongoDB & Mongoose 9 (supports BYOD connection strings)
+- **Encryption:** Web Crypto API (AES-GCM-256, PBKDF2)
 - **Cache / Rate Limiting:** Upstash Redis & `@upstash/ratelimit`
 - **Session:** `iron-session`
+- **Testing:** Vitest (31 unit & integration tests)
 - **Validation:** Zod
 - **Email:** Nodemailer
 
